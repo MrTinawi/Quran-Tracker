@@ -1,5 +1,4 @@
 __pycache__/
 .venv/
-*.db
 deploy.py
 .streamlit/secrets.toml
