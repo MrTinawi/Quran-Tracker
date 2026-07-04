@@ -2,3 +2,4 @@ __pycache__/
 .venv/
 deploy.py
 .streamlit/secrets.toml
+data.db

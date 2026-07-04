@@ -1,5 +1,8 @@
+flask
+flask-cors
 streamlit
 pandas
 matplotlib
 psycopg2-binary
 bcrypt
+gunicorn

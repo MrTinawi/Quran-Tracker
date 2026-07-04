@@ -136,12 +136,42 @@ def get_teams():
     _close(conn)
     return rows
 
+def get_team_by_id(team_id):
+    conn = _get_conn()
+    cur = _exec(conn, _sql("SELECT * FROM teams WHERE id = ?"), (team_id,))
+    row = cur.fetchone()
+    _close(conn)
+    return row
+
 def get_students(team_id):
     conn = _get_conn()
     cur = _exec(conn, _sql("SELECT * FROM students WHERE team_id = ? ORDER BY name"), (team_id,))
     rows = cur.fetchall()
     _close(conn)
     return rows
+
+def get_student_by_id(student_id):
+    conn = _get_conn()
+    cur = _exec(conn, _sql("SELECT s.*, t.name as team_name FROM students s JOIN teams t ON s.team_id = t.id WHERE s.id = ?"), (student_id,))
+    row = cur.fetchone()
+    _close(conn)
+    return row
+
+def add_student(name, team_id):
+    conn = _get_conn()
+    ret = "" if USE_SQLITE else " RETURNING id"
+    cur = _exec(conn, _sql(f"INSERT INTO students (name, team_id) VALUES (?, ?){ret}"), (name, team_id))
+    student_id = cur.lastrowid if USE_SQLITE else cur.fetchone()["id"]
+    _commit(conn)
+    _close(conn)
+    return student_id
+
+def remove_student(student_id):
+    conn = _get_conn()
+    _exec(conn, _sql("DELETE FROM entries WHERE student_id = ?"), (student_id,))
+    _exec(conn, _sql("DELETE FROM students WHERE id = ?"), (student_id,))
+    _commit(conn)
+    _close(conn)
 
 def get_all_students():
     conn = _get_conn()
@@ -157,6 +187,13 @@ def get_all_students():
 
 def get_sessions():
     conn = _get_conn()
+    cur = _exec(conn, "SELECT * FROM sessions ORDER BY id ASC")
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+def get_sessions_desc():
+    conn = _get_conn()
     cur = _exec(conn, "SELECT * FROM sessions ORDER BY id DESC")
     rows = cur.fetchall()
     _close(conn)
@@ -170,6 +207,13 @@ def add_session(date, label):
     _commit(conn)
     _close(conn)
     return session_id
+
+def get_session_by_id(session_id):
+    conn = _get_conn()
+    cur = _exec(conn, _sql("SELECT * FROM sessions WHERE id = ?"), (session_id,))
+    row = cur.fetchone()
+    _close(conn)
+    return row
 
 def get_or_create_session(date, label):
     conn = _get_conn()
@@ -312,6 +356,13 @@ def get_top_memorizers(session_id):
         FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
         WHERE e.session_id = ? AND e.hifdh_pages > 0 ORDER BY e.hifdh_pages DESC
     """), (session_id,))
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+def get_all_entries_raw():
+    conn = _get_conn()
+    cur = _exec(conn, "SELECT id, student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes FROM entries ORDER BY id")
     rows = cur.fetchall()
     _close(conn)
     return rows
