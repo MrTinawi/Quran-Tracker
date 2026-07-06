@@ -9,3 +9,25 @@ services:
         generateValue: true
       - key: ADMIN_PASSWORD
         value: admin123
+      - key: DATABASE_URL
+        fromDatabase:
+          name: quran-tracker-db
+          property: connectionString
+
+  - type: web
+    name: quran-tracker-app
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: ADMIN_PASSWORD
+        value: admin123
+      - key: DATABASE_URL
+        fromDatabase:
+          name: quran-tracker-db
+          property: connectionString
+
+databases:
+  - name: quran-tracker-db
+    databaseName: quran_tracker
+    plan: free

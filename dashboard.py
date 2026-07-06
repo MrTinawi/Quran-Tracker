@@ -1,7 +1,7 @@
 import os
 import sys
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
 
@@ -66,9 +66,48 @@ def sessions():
     rows = database.get_sessions()
     return jsonify([dict(r) for r in rows])
 
-@app.route("/api/teams")
+@app.route("/api/teams", methods=["GET", "POST"])
 def api_teams():
+    if request.method == "POST":
+        user_info = require_teacher()
+        if not user_info:
+            return jsonify({"error": "Unauthorized"}), 401
+        data = request.get_json()
+        name = data.get("name", "").strip()
+        if not name:
+            return jsonify({"error": "name required"}), 400
+        team_id = database.add_team(name)
+        return jsonify({"success": True, "id": team_id}), 201
     rows = database.get_teams()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/weekly-hifdh")
+def api_weekly_hifdh():
+    since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    rows = database.get_weekly_top_hifdh(since)
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/weekly-rabt")
+def api_weekly_rabt():
+    since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    rows = database.get_weekly_top_rabt(since)
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/anam/overall")
+def api_anam_overall():
+    rows = database.get_student_anam_all()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/anam/weekly")
+def api_anam_weekly():
+    since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    rows = database.get_student_anam_weekly(since)
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/anam/daily")
+def api_anam_daily():
+    date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+    rows = database.get_student_anam_daily(date)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/teams/<int:team_id>/students")

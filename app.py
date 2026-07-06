@@ -4,14 +4,13 @@ import matplotlib.pyplot as plt
 import matplotlib
 import os
 import sys
+from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(__file__))
 import database
 
 matplotlib.use("Agg")
 plt.rcParams["figure.figsize"] = (10, 5)
-
-st.set_page_config(page_title="نظام تتبع الحفظ", layout="wide")
 
 database.init_db()
 
@@ -34,6 +33,12 @@ TEXTS = {
     "select_student": "اختر الطالب",
     "hifdh": "حفظ (صفحات)",
     "tilawah": "تلاوة (صفحات)",
+    "surah_anam": "سورة الأنعام (صفحات)",
+    "attendance": "الحضور",
+    "attended": "حاضر",
+    "not_attended": "غائب",
+    "misbehaviour_penalty": "خصم سوء السلوك (نقاط)",
+    "inactive_penalty": "خصم الحضور بدون عمل (نقاط)",
     "rabt": "ربط (صفحات)",
     "points": "النقاط (💲)",
     "notes": "ملاحظات",
@@ -64,6 +69,16 @@ TEXTS = {
     "hifdh_leader": "بطل الحفظ",
     "weekly_winner": "بطل هذا الأسبوع",
     "no_memorizers": "لا يوجد حفظ في هذه الجلسة",
+    "weekly_winners": "أبطال الأسبوع",
+    "best_rabt": "أفضل الربط",
+    "rabt_leader": "بطل الربط",
+    "weekly_period": "آخر 7 أيام",
+    "team_mgmt": "إدارة الفرق والطلاب",
+    "create_team": "إنشاء فريق جديد",
+    "team_name": "اسم الفريق",
+    "team_created": "✅ تم إنشاء الفريق",
+    "add_student_to_team": "إضافة طالب إلى فريق",
+    "student_added": "✅ تم إضافة الطالب",
 }
 
 def _(key):
@@ -157,12 +172,38 @@ with st.sidebar:
                     st.success(f"✅ تم إنشاء حساب {new_user}")
                     st.rerun()
 
+        with st.expander("👥 " + _("team_mgmt")):
+            with st.form("create_team"):
+                new_team_name = st.text_input(_("team_name"))
+                if st.form_submit_button(_("create_team"), type="primary", use_container_width=True):
+                    if new_team_name.strip():
+                        database.add_team(new_team_name.strip())
+                        st.success(_("team_created"))
+                        st.rerun()
+                    else:
+                        st.error("الرجاء إدخال اسم الفريق")
+
+            st.markdown("---")
+
+            all_teams = database.get_teams()
+            team_opts = {t["name"]: t["id"] for t in all_teams}
+            with st.form("add_student"):
+                sel_team = st.selectbox(_("select_team"), list(team_opts.keys()))
+                new_student = st.text_input(_("select_student"))
+                if st.form_submit_button(_("add_student_to_team"), type="primary", use_container_width=True):
+                    if new_student.strip():
+                        database.add_student(new_student.strip(), team_opts[sel_team])
+                        st.success(_("student_added"))
+                        st.rerun()
+                    else:
+                        st.error("الرجاء إدخال اسم الطالب")
+
 # ─── Main Content ───
 if session_id is None:
     st.info("الرجاء إضافة جلسة أولاً من القائمة الجانبية")
     st.stop()
 
-tabs = st.tabs([_("data_entry"), _("team_totals"), _("session_report"), _("analysis"), _("export"), _("best_memorizers")])
+tabs = st.tabs([_("data_entry"), _("team_totals"), _("session_report"), _("analysis"), _("export"), _("best_memorizers"), _("weekly_winners")])
 
 # ═══════════════════════════════════════════
 # TAB 1: DATA ENTRY
@@ -197,31 +238,65 @@ with tabs[0]:
 
         hifdh = st.number_input(
             _("hifdh"), min_value=0.0, step=0.25,
-            value=float(existing["hifdh_pages"]) if existing else 0.0
+            value=float(existing["hifdh_pages"]) if existing else 0.0,
+            key=f"hifdh_{student_id}_{session_id}"
         )
         tilawah = st.number_input(
             _("tilawah"), min_value=0.0, step=0.25,
-            value=float(existing["tilawah_pages"]) if existing else 0.0
+            value=float(existing["tilawah_pages"]) if existing else 0.0,
+            key=f"tilawah_{student_id}_{session_id}"
+        )
+        surah_anam = st.number_input(
+            _("surah_anam"), min_value=0.0, step=0.25,
+            value=float(existing["surah_anam_pages"]) if existing and "surah_anam_pages" in existing else 0.0,
+            key=f"anam_{student_id}_{session_id}"
         )
         rabt = st.number_input(
             _("rabt"), min_value=0.0, step=0.25,
-            value=float(existing["rabt_pages"]) if existing else 0.0
+            value=float(existing["rabt_pages"]) if existing else 0.0,
+            key=f"rabt_{student_id}_{session_id}"
         )
         points = st.number_input(
             _("points"), min_value=0, step=5,
-            value=int(existing["points"]) if existing else 0
+            value=int(existing["points"]) if existing else 0,
+            key=f"points_{student_id}_{session_id}"
         )
+
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            attended = st.checkbox(
+                _("attended"),
+                value=bool(existing["attended"]) if existing and "attended" in existing else True,
+                key=f"attended_{student_id}_{session_id}"
+            )
+        with col_a2:
+            if not attended:
+                st.caption(_("not_attended"))
+
+        misbehaviour_penalty = st.number_input(
+            _("misbehaviour_penalty"), min_value=-100, step=1,
+            value=int(existing["misbehaviour_penalty"]) if existing and "misbehaviour_penalty" in existing else 0,
+            key=f"misbehave_{student_id}_{session_id}"
+        )
+        inactive_penalty = st.number_input(
+            _("inactive_penalty"), min_value=-100, step=1,
+            value=int(existing["inactive_penalty"]) if existing and "inactive_penalty" in existing else 0,
+            key=f"inactive_{student_id}_{session_id}"
+        )
+
         notes = st.text_area(
             _("notes"),
             value=existing["notes"] if existing and existing["notes"] else "",
-            height=120
+            height=120,
+            key=f"notes_{student_id}_{session_id}"
         )
 
         if st.button(_("save"), type="primary", use_container_width=True):
             if not is_teacher:
                 st.error("غير مسموح بالتعديل. فقط المشرفون يمكنهم حفظ البيانات.")
             else:
-                database.save_entry(student_id, session_id, hifdh, tilawah, rabt, points, notes)
+                database.save_entry(student_id, session_id, hifdh, tilawah, rabt, points, notes, surah_anam,
+                                    int(attended), misbehaviour_penalty, inactive_penalty)
                 st.success(_("saved"))
 
     # Student history below
@@ -233,8 +308,12 @@ with tabs[0]:
             "الجلسة": h["label"],
             "حفظ": h["hifdh_pages"],
             "تلاوة": h["tilawah_pages"],
+            "الأنعام": h["surah_anam_pages"],
             "ربط": h["rabt_pages"],
-            "نقاط": h["points"]
+            "نقاط": h["points"],
+            "حضور": "✅" if h["attended"] else "❌",
+            "خصم سلوك": h["misbehaviour_penalty"],
+            "خصم خمول": h["inactive_penalty"],
         } for h in history])
         st.dataframe(hist_df, use_container_width=True, hide_index=True)
 
@@ -340,8 +419,12 @@ with tabs[2]:
             _("student"): e["student_name"],
             _("hifdh"): e["hifdh_pages"],
             _("tilawah"): e["tilawah_pages"],
+            "الأنعام": e["surah_anam_pages"],
             _("rabt"): e["rabt_pages"],
             _("points"): e["points"],
+            "حضور": "✅" if e["attended"] else "❌",
+            "خصم سلوك": e["misbehaviour_penalty"],
+            "خصم خمول": e["inactive_penalty"],
         } for e in entries])
         st.dataframe(report_df, use_container_width=True, hide_index=True)
     else:
@@ -367,6 +450,7 @@ with tabs[3]:
         "student": e["student"],
         "hifdh_pages": e["hifdh_pages"],
         "tilawah_pages": e["tilawah_pages"],
+        "surah_anam_pages": e["surah_anam_pages"],
         "rabt_pages": e["rabt_pages"],
         "points": e["points"],
     } for e in all_entries])
@@ -395,14 +479,15 @@ with tabs[3]:
     # Group by session for trend
     if selected_student_filter != "الكل":
         trend = df_filtered.groupby("session_date").agg(
-            {"hifdh_pages": "sum", "tilawah_pages": "sum", "rabt_pages": "sum", "points": "sum"}
+            {"hifdh_pages": "sum", "tilawah_pages": "sum", "surah_anam_pages": "sum", "rabt_pages": "sum", "points": "sum"}
         ).reset_index()
 
         st.subheader(_("student_progress"))
         fig, ax = plt.subplots()
         ax.plot(trend["session_date"], trend["hifdh_pages"], "o-", label="حفظ")
         ax.plot(trend["session_date"], trend["tilawah_pages"], "s-", label="تلاوة")
-        ax.plot(trend["session_date"], trend["rabt_pages"], "^-", label="ربط")
+        ax.plot(trend["session_date"], trend["surah_anam_pages"], "^-", label="الأنعام")
+        ax.plot(trend["session_date"], trend["rabt_pages"], "D-", label="ربط")
         ax.plot(trend["session_date"], trend["points"], "D-", label="نقاط")
         ax.set_xlabel("التاريخ")
         ax.legend()
@@ -440,8 +525,12 @@ with tabs[4]:
             "الطالب": e["student"],
             "حفظ (صفحات)": e["hifdh_pages"],
             "تلاوة (صفحات)": e["tilawah_pages"],
+            "الأنعام (صفحات)": e["surah_anam_pages"],
             "ربط (صفحات)": e["rabt_pages"],
             "النقاط": e["points"],
+            "حضور": "نعم" if e["attended"] else "لا",
+            "خصم سلوك": e["misbehaviour_penalty"],
+            "خصم خمول": e["inactive_penalty"],
             "ملاحظات": e["notes"],
         } for e in all_data])
 
@@ -525,3 +614,68 @@ with tabs[5]:
         st.pyplot(fig_l)
     else:
         st.info(_("no_data"))
+
+# ═══════════════════════════════════════════
+# TAB 7: WEEKLY WINNERS
+# ═══════════════════════════════════════════
+with tabs[6]:
+    st.subheader(_("weekly_winners"))
+    st.caption(_("weekly_period"))
+
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    col_h, col_r = st.columns(2)
+
+    with col_h:
+        st.markdown(f"### 🏆 {_('hifdh_leader')}")
+        top_hifdh = database.get_weekly_top_hifdh(week_ago)
+        if top_hifdh:
+            winner_h = top_hifdh[0]
+            st.success(f"**{winner_h['student_name']}** (فريق {winner_h['team_name']}) — {winner_h['total_hifdh']} صفحة حفظ")
+
+            hifdh_df = pd.DataFrame([{
+                _("rank"): i + 1,
+                _("student"): r["student_name"],
+                _("team"): r["team_name"],
+                "حفظ": r["total_hifdh"],
+                "ربط": r["total_rabt"],
+                _("points"): r["total_points"],
+            } for i, r in enumerate(top_hifdh)])
+            st.dataframe(hifdh_df, use_container_width=True, hide_index=True)
+
+            fig_h, ax_h = plt.subplots()
+            names_h = [r["student_name"] for r in top_hifdh[:10]]
+            pages_h = [r["total_hifdh"] for r in top_hifdh[:10]]
+            colors_h = ["#2ecc71" if i == 0 else "#3498db" for i in range(len(names_h))]
+            ax_h.barh(names_h[::-1], pages_h[::-1], color=colors_h[::-1])
+            ax_h.set_xlabel("صفحات حفظ")
+            st.pyplot(fig_h)
+        else:
+            st.info(_("no_memorizers"))
+
+    with col_r:
+        st.markdown(f"### 🏆 {_('rabt_leader')}")
+        top_rabt = database.get_weekly_top_rabt(week_ago)
+        if top_rabt:
+            winner_r = top_rabt[0]
+            st.success(f"**{winner_r['student_name']}** (فريق {winner_r['team_name']}) — {winner_r['total_rabt']} صفحة ربط")
+
+            rabt_df = pd.DataFrame([{
+                _("rank"): i + 1,
+                _("student"): r["student_name"],
+                _("team"): r["team_name"],
+                "حفظ": r["total_hifdh"],
+                "ربط": r["total_rabt"],
+                _("points"): r["total_points"],
+            } for i, r in enumerate(top_rabt)])
+            st.dataframe(rabt_df, use_container_width=True, hide_index=True)
+
+            fig_r, ax_r = plt.subplots()
+            names_r = [r["student_name"] for r in top_rabt[:10]]
+            pages_r = [r["total_rabt"] for r in top_rabt[:10]]
+            colors_r = ["#e74c3c" if i == 0 else "#9b59b6" for i in range(len(names_r))]
+            ax_r.barh(names_r[::-1], pages_r[::-1], color=colors_r[::-1])
+            ax_r.set_xlabel("صفحات ربط")
+            st.pyplot(fig_r)
+        else:
+            st.info(_("no_data"))

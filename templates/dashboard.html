@@ -789,6 +789,70 @@ body {
         <div class="graph-footer">🚀 كلما حفظت صفحات أكثر، يرتفع خط فريقك نحو الأعلى!</div>
       </div>
 
+      <!-- Weekly Winners Section -->
+      <div class="graph-section" style="margin-top: 30px;">
+        <div class="graph-header" style="background: linear-gradient(135deg, #c41e3a, #e94560);">
+          <span class="header-icon">🏆</span>
+          <span class="section-title">أبطال الأسبوع &bull; WEEKLY WINNERS</span>
+          <span class="header-icon">🌟</span>
+        </div>
+        <div class="graph-body" style="padding: 20px;">
+          <div id="weeklyWinners" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="team-card" style="margin: 0;">
+              <div class="team-card-header-band" style="background: #2ecc71; height: 36px;">
+                <div style="font-size: 0.8rem; font-weight: 900;">🏆 أبطال الحفظ (أفضل 3)</div>
+              </div>
+              <div class="team-card-body" id="weeklyHifdhWinner">
+                <p style="color: #888; font-size: 0.85rem;">جار التحميل...</p>
+              </div>
+            </div>
+            <div class="team-card" style="margin: 0;">
+              <div class="team-card-header-band" style="background: #e74c3c; height: 36px;">
+                <div style="font-size: 0.8rem; font-weight: 900;">🏆 أبطال الربط (أفضل 3)</div>
+              </div>
+              <div class="team-card-body" id="weeklyRabtWinner">
+                <p style="color: #888; font-size: 0.85rem;">جار التحميل...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="graph-footer" style="color: #c41e3a;">⭐ يتم تحديث أبطال الأسبوع تلقائياً كل 7 أيام!</div>
+      </div>
+
+      <!-- Surah Al Anam Tracking Section -->
+      <div class="graph-section" style="margin-top: 30px;">
+        <div class="graph-header" style="background: linear-gradient(135deg, #8e44ad, #9b59b6);">
+          <span class="header-icon">📖</span>
+          <span class="section-title">تقدم سورة الأنعام &bull; SURAH AL-ANAM PROGRESS</span>
+          <span class="header-icon">🌙</span>
+        </div>
+        <div class="graph-body" style="padding: 20px;">
+          <div style="display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; justify-content: center;">
+            <button class="preset-btn active-preset" id="anam-all-btn" onclick="switchAnamView('all')">الإجمالي</button>
+            <button class="preset-btn" id="anam-week-btn" onclick="switchAnamView('week')">آخر 7 أيام</button>
+            <button class="preset-btn" id="anam-day-btn" onclick="switchAnamView('day')">يوم محدد</button>
+            <input type="date" id="anamDatePicker" style="font-family: 'Cairo', sans-serif; padding: 5px 10px; border: 2px solid #000; border-radius: 4px; display: none;" onchange="fetchAnamData('day')">
+          </div>
+          <div style="overflow-x: auto;">
+            <table id="anamTable" style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+              <thead>
+                <tr style="background: #8e44ad; color: #fff; border: 2px solid #000;">
+                  <th style="padding: 8px; text-align: right;">#</th>
+                  <th style="padding: 8px; text-align: right;">الطالب</th>
+                  <th style="padding: 8px; text-align: right;">الفريق</th>
+                  <th style="padding: 8px; text-align: center;">صفحات الأنعام</th>
+                  <th style="padding: 8px; text-align: center;">الجلسات</th>
+                </tr>
+              </thead>
+              <tbody id="anamTableBody">
+                <tr><td colspan="5" style="padding: 20px; text-align: center; color: #888;">جار التحميل...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="graph-footer" style="color: #9b59b6;">📖 سورة الأنعام — تتبع عدد الصفحات التي تمت تلاوتها</div>
+      </div>
+
     </div>
 
   </div> <!-- /board-center -->
@@ -1133,6 +1197,63 @@ function updateChart(data) {
 
 const API_BASE = new URLSearchParams(window.location.search).get('api') || '';
 
+async function fetchWeeklyWinners() {
+  try {
+    const [hifdhRes, rabtRes] = await Promise.all([
+      fetch(API_BASE + '/api/weekly-hifdh'),
+      fetch(API_BASE + '/api/weekly-rabt'),
+    ]);
+    const hifdhData = await hifdhRes.json();
+    const rabtData = await rabtRes.json();
+
+    const hifdhEl = document.getElementById('weeklyHifdhWinner');
+    const top = hifdhData.slice(0, 3);
+    if (top.length > 0) {
+      const medals = ['🥇', '🥈', '🥉'];
+      const colors = ['#2ecc71', '#3498db', '#9b59b6'];
+      hifdhEl.innerHTML = top.map((w, i) => `
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; ${i > 0 ? 'border-top: 1px solid #eee;' : ''}">
+          <span style="font-size: 1.3rem;">${medals[i]}</span>
+          <div style="flex: 1; text-align: right;">
+            <div style="font-weight: 900; color: ${colors[i]};">${w.student_name}</div>
+            <div style="font-size: 0.75rem; color: #555;">فريق ${w.team_name}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-weight: 800; color: #000;">📖 ${w.total_hifdh}</div>
+            <div style="font-size: 0.7rem; color: #888;">صفحة</div>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      hifdhEl.innerHTML = '<p style="color: #888; padding: 10px;">لا يوجد حفظ هذا الأسبوع</p>';
+    }
+
+    const rabtEl = document.getElementById('weeklyRabtWinner');
+    const topR = rabtData.slice(0, 3);
+    if (topR.length > 0) {
+      const medals = ['🥇', '🥈', '🥉'];
+      const colors = ['#e74c3c', '#e67e22', '#f1c40f'];
+      rabtEl.innerHTML = topR.map((w, i) => `
+        <div style="display: flex; align-items: center; gap: 8px; padding: 6px 0; ${i > 0 ? 'border-top: 1px solid #eee;' : ''}">
+          <span style="font-size: 1.3rem;">${medals[i]}</span>
+          <div style="flex: 1; text-align: right;">
+            <div style="font-weight: 900; color: ${colors[i]};">${w.student_name}</div>
+            <div style="font-size: 0.75rem; color: #555;">فريق ${w.team_name}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="font-weight: 800; color: #000;">🔗 ${w.total_rabt}</div>
+            <div style="font-size: 0.7rem; color: #888;">صفحة</div>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      rabtEl.innerHTML = '<p style="color: #888; padding: 10px;">لا يوجد ربط هذا الأسبوع</p>';
+    }
+  } catch (e) {
+    console.error('Weekly winners fetch error:', e);
+  }
+}
+
 async function fetchData() {
   try {
     const [leaderboardRes, historyRes] = await Promise.all([
@@ -1161,8 +1282,63 @@ async function fetchData() {
   }
 }
 
+// ─── Surah Al Anam Tracking ───
+let anamView = 'all';
+
+function switchAnamView(view) {
+  anamView = view;
+  document.getElementById('anam-all-btn').classList.toggle('active-preset', view === 'all');
+  document.getElementById('anam-week-btn').classList.toggle('active-preset', view === 'week');
+  document.getElementById('anam-day-btn').classList.toggle('active-preset', view === 'day');
+  document.getElementById('anamDatePicker').style.display = view === 'day' ? 'inline-block' : 'none';
+  fetchAnamData(view);
+}
+
+async function fetchAnamData(view) {
+  try {
+    let url;
+    if (view === 'week') {
+      url = API_BASE + '/api/anam/weekly';
+    } else if (view === 'day') {
+      const date = document.getElementById('anamDatePicker').value || new Date().toISOString().split('T')[0];
+      url = API_BASE + '/api/anam/daily?date=' + encodeURIComponent(date);
+    } else {
+      url = API_BASE + '/api/anam/overall';
+    }
+    const res = await fetch(url);
+    const data = await res.json();
+    renderAnamTable(data);
+  } catch (e) {
+    console.error('Anam fetch error:', e);
+    document.getElementById('anamTableBody').innerHTML =
+      '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #e74c3c;">خطأ في تحميل البيانات</td></tr>';
+  }
+}
+
+function renderAnamTable(data) {
+  const tbody = document.getElementById('anamTableBody');
+  if (!data || data.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding: 20px; text-align: center; color: #888;">لا توجد بيانات</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map((row, i) => {
+    const rankColor = i === 0 ? '#8e44ad' : i === 1 ? '#95a5a6' : i === 2 ? '#cd7f32' : '#333';
+    return `<tr style="border-bottom: 1px solid #ddd; background: ${i % 2 === 0 ? '#fafafa' : '#fff'}">
+      <td style="padding: 8px; text-align: right; font-weight: 800; color: ${rankColor};">${i + 1}</td>
+      <td style="padding: 8px; text-align: right; font-weight: 700;">${row.student_name}</td>
+      <td style="padding: 8px; text-align: right; color: #555;">${row.team_name}</td>
+      <td style="padding: 8px; text-align: center; font-weight: 800; color: #8e44ad;">📖 ${row.total_anam}</td>
+      <td style="padding: 8px; text-align: center;">${row.session_count || '-'}</td>
+    </tr>`;
+  }).join('');
+}
+
 fetchData();
+fetchWeeklyWinners();
+fetchAnamData('all');
 setInterval(fetchData, 5000);
+setInterval(fetchWeeklyWinners, 30000);
+setInterval(() => { if (anamView !== 'day') fetchAnamData(anamView); }, 30000);
 </script>
 </body>
 </html>

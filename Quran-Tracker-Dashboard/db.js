@@ -206,6 +206,19 @@ async function apiRemoveStudent(studentId) {
   return res.json();
 }
 
+async function apiAddTeam(name) {
+  const res = await fetch(API_BASE + '/api/teams', {
+    method: 'POST',
+    headers: apiHeaders(),
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to add team');
+  }
+  return res.json();
+}
+
 async function apiAddSession(label, date) {
   const res = await fetch(API_BASE + '/api/sessions', {
     method: 'POST',
