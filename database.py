@@ -13,12 +13,21 @@ if not USE_SQLITE:
 DB_PATH = os.path.join(os.path.dirname(__file__), "data.db")
 
 def _get_conn():
+    global USE_SQLITE
     if USE_SQLITE:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    try:
+        return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    except psycopg2.OperationalError as e:
+        print(f"PostgreSQL connection failed ({e}). Falling back to SQLite.")
+        USE_SQLITE = True
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
 
 def _q():
     return "?" if USE_SQLITE else "%s"
