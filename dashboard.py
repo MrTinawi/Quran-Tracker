@@ -47,18 +47,23 @@ def require_teacher():
 
 # ─── Public read endpoints (no auth needed) ───
 
+def _get_class():
+    return request.args.get("class", request.headers.get("X-Class", "new_vision"))
+
 @app.route("/")
 def index():
     return render_template("dashboard.html")
 
 @app.route("/api/leaderboard")
 def leaderboard():
-    rows = database.get_cumulative_team_totals()
+    class_name = _get_class()
+    rows = database.get_cumulative_team_totals(class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/pages-history")
 def pages_history():
-    rows = database.get_cumulative_points_by_session()
+    class_name = _get_class()
+    rows = database.get_cumulative_points_by_session(class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/sessions")
@@ -68,6 +73,7 @@ def sessions():
 
 @app.route("/api/teams", methods=["GET", "POST"])
 def api_teams():
+    class_name = _get_class()
     if request.method == "POST":
         user_info = require_teacher()
         if not user_info:
@@ -76,38 +82,43 @@ def api_teams():
         name = data.get("name", "").strip()
         if not name:
             return jsonify({"error": "name required"}), 400
-        team_id = database.add_team(name)
+        team_id = database.add_team(name, class_name=class_name)
         return jsonify({"success": True, "id": team_id}), 201
-    rows = database.get_teams()
+    rows = database.get_teams(class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/weekly-hifdh")
 def api_weekly_hifdh():
+    class_name = _get_class()
     since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    rows = database.get_weekly_top_hifdh(since)
+    rows = database.get_weekly_top_hifdh(since, class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/weekly-rabt")
 def api_weekly_rabt():
+    class_name = _get_class()
     since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    rows = database.get_weekly_top_rabt(since)
+    rows = database.get_weekly_top_rabt(since, class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/anam/overall")
 def api_anam_overall():
-    rows = database.get_student_anam_all()
+    class_name = _get_class()
+    rows = database.get_student_anam_all(class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/anam/weekly")
 def api_anam_weekly():
+    class_name = _get_class()
     since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-    rows = database.get_student_anam_weekly(since)
+    rows = database.get_student_anam_weekly(since, class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/anam/daily")
 def api_anam_daily():
+    class_name = _get_class()
     date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
-    rows = database.get_student_anam_daily(date)
+    rows = database.get_student_anam_daily(date, class_name=class_name)
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/teams/<int:team_id>/students")
@@ -124,10 +135,11 @@ def api_student_history(student_id):
 
 @app.route("/api/data")
 def api_data():
-    teams = database.get_teams()
-    students = database.get_all_students()
+    class_name = _get_class()
+    teams = database.get_teams(class_name=class_name)
+    students = database.get_all_students(class_name=class_name)
     sessions = database.get_sessions()
-    entries = database.get_all_entries_raw()
+    entries = database.get_all_entries_raw(class_name=class_name)
     return jsonify({
         "teams": [dict(t) for t in teams],
         "students": [dict(s) for s in students],

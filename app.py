@@ -21,8 +21,14 @@ if not database.get_teachers_count():
 
 LANG = "ar"
 
+CLASS_LABELS = {
+    "new_vision": "نيو فيجن",
+    "choueifat": "الشويفات",
+}
+
 TEXTS = {
     "title": "📖 نظام تتبع حفظ القرآن",
+    "class_label": "اختر الصف",
     "session_mgmt": "إدارة الجلسات",
     "date": "التاريخ",
     "label": "عنوان الجلسة",
@@ -106,17 +112,36 @@ if st.session_state.user is None:
 user = st.session_state.user
 is_teacher = user["role"] == "teacher"
 
-st.title(_("title"))
+# ─── Class Selection ───
+if "class_name" not in st.session_state:
+    st.session_state.class_name = "new_vision"
 
-# Initialize session state
-if "current_team" not in st.session_state:
-    st.session_state.current_team = None
-if "current_student" not in st.session_state:
-    st.session_state.current_student = None
+class_name = st.session_state.class_name
 
-# ─── Sidebar: Session Management ───
+st.title(f"📖 {CLASS_LABELS.get(class_name, class_name)} — نظام تتبع حفظ القرآن")
+
+# ─── Sidebar ───
 with st.sidebar:
     st.markdown(f"**المستخدم:** {user['username']}  \n**الدور:** {'مشرف' if is_teacher else 'طالب'}")
+
+    selected_class = st.selectbox(
+        _("class_label"),
+        options=database.get_classes(),
+        format_func=lambda c: CLASS_LABELS.get(c, c),
+        index=database.get_classes().index(class_name),
+        key="class_selector"
+    )
+
+    if selected_class != st.session_state.class_name:
+        st.session_state.class_name = selected_class
+        st.session_state.current_team = None
+        st.session_state.current_student = None
+        if selected_class == "choueifat":
+            database.seed_choueifat()
+        st.rerun()
+
+    class_name = st.session_state.class_name
+
     if st.button("🚪 تسجيل الخروج"):
         st.session_state.user = None
         st.rerun()
@@ -177,7 +202,7 @@ with st.sidebar:
                 new_team_name = st.text_input(_("team_name"))
                 if st.form_submit_button(_("create_team"), type="primary", use_container_width=True):
                     if new_team_name.strip():
-                        database.add_team(new_team_name.strip())
+                        database.add_team(new_team_name.strip(), class_name=class_name)
                         st.success(_("team_created"))
                         st.rerun()
                     else:
@@ -185,7 +210,7 @@ with st.sidebar:
 
             st.markdown("---")
 
-            all_teams = database.get_teams()
+            all_teams = database.get_teams(class_name=class_name)
             team_opts = {t["name"]: t["id"] for t in all_teams}
             with st.form("add_student"):
                 sel_team = st.selectbox(_("select_team"), list(team_opts.keys()))
@@ -203,6 +228,12 @@ if session_id is None:
     st.info("الرجاء إضافة جلسة أولاً من القائمة الجانبية")
     st.stop()
 
+# Initialize session state
+if "current_team" not in st.session_state:
+    st.session_state.current_team = None
+if "current_student" not in st.session_state:
+    st.session_state.current_student = None
+
 tabs = st.tabs([_("data_entry"), _("team_totals"), _("session_report"), _("analysis"), _("export"), _("best_memorizers"), _("weekly_winners")])
 
 # ═══════════════════════════════════════════
@@ -212,7 +243,7 @@ with tabs[0]:
     col1, col2 = st.columns([1, 2])
 
     with col1:
-        teams = database.get_teams()
+        teams = database.get_teams(class_name=class_name)
         team_names = {t["name"]: t["id"] for t in teams}
         selected_team_name = st.selectbox(
             _("select_team"), list(team_names.keys()),
@@ -323,7 +354,7 @@ with tabs[0]:
 with tabs[1]:
     st.subheader(_("team_totals"))
 
-    totals = database.get_session_totals(session_id)
+    totals = database.get_session_totals(session_id, class_name=class_name)
     if totals:
         total_data = []
         for t in totals:
@@ -371,7 +402,7 @@ with tabs[1]:
     st.markdown("---")
     st.subheader(_("cumulative"))
 
-    cum_data = database.get_cumulative_team_totals()
+    cum_data = database.get_cumulative_team_totals(class_name=class_name)
     if cum_data:
         cum_df = pd.DataFrame([{
             _("team"): c["team_name"],
@@ -386,7 +417,7 @@ with tabs[1]:
         st.dataframe(cum_df, use_container_width=True, hide_index=True)
 
         # Running cumulative line chart
-        cum_by_session = database.get_cumulative_points_by_session()
+        cum_by_session = database.get_cumulative_points_by_session(class_name=class_name)
         if cum_by_session:
             cum_pts_df = pd.DataFrame([{
                 "session_label": c["label"],
@@ -412,7 +443,7 @@ with tabs[1]:
 with tabs[2]:
     st.subheader(_("session_report"))
 
-    entries = database.get_all_entries_for_session(session_id)
+    entries = database.get_all_entries_for_session(session_id, class_name=class_name)
     if entries:
         report_df = pd.DataFrame([{
             _("team"): e["team_name"],
@@ -436,8 +467,8 @@ with tabs[2]:
 with tabs[3]:
     st.subheader(_("analysis"))
 
-    teams = database.get_teams()
-    all_entries = database.get_all_data_for_export()
+    teams = database.get_teams(class_name=class_name)
+    all_entries = database.get_all_data_for_export(class_name=class_name)
 
     if not all_entries:
         st.info(_("no_data"))
@@ -516,7 +547,7 @@ with tabs[3]:
 with tabs[4]:
     st.subheader(_("export"))
 
-    all_data = database.get_all_data_for_export()
+    all_data = database.get_all_data_for_export(class_name=class_name)
     if all_data:
         export_df = pd.DataFrame([{
             "التاريخ": e["session_date"],
@@ -560,7 +591,7 @@ with tabs[5]:
     )
     hifdh_session_id = session_options[sess_for_hifdh]
 
-    top_mems = database.get_top_memorizers(hifdh_session_id)
+    top_mems = database.get_top_memorizers(hifdh_session_id, class_name=class_name)
     if top_mems:
         winner = top_mems[0]
         st.success(f"🏆 {_('hifdh_leader')}: **{winner['student_name']}** (فريق {winner['team_name']}) — {winner['hifdh_pages']} صفحة حفظ")
@@ -589,7 +620,7 @@ with tabs[5]:
     st.markdown("---")
     st.subheader("أبطال الحفظ عبر الجلسات")
 
-    leaders = database.get_hifdh_leaders_all_sessions()
+    leaders = database.get_hifdh_leaders_all_sessions(class_name=class_name)
     if leaders:
         leaders_df = pd.DataFrame([{
             "الجلسة": l["label"],
@@ -628,7 +659,7 @@ with tabs[6]:
 
     with col_h:
         st.markdown(f"### 🏆 {_('hifdh_leader')}")
-        top_hifdh = database.get_weekly_top_hifdh(week_ago)
+        top_hifdh = database.get_weekly_top_hifdh(week_ago, class_name=class_name)
         if top_hifdh:
             winner_h = top_hifdh[0]
             st.success(f"**{winner_h['student_name']}** (فريق {winner_h['team_name']}) — {winner_h['total_hifdh']} صفحة حفظ")
@@ -655,7 +686,7 @@ with tabs[6]:
 
     with col_r:
         st.markdown(f"### 🏆 {_('rabt_leader')}")
-        top_rabt = database.get_weekly_top_rabt(week_ago)
+        top_rabt = database.get_weekly_top_rabt(week_ago, class_name=class_name)
         if top_rabt:
             winner_r = top_rabt[0]
             st.success(f"**{winner_r['student_name']}** (فريق {winner_r['team_name']}) — {winner_r['total_rabt']} صفحة ربط")

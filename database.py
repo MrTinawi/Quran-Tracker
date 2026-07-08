@@ -58,7 +58,8 @@ def init_db():
     if USE_SQLITE:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS teams (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE,
+                class_name TEXT NOT NULL DEFAULT 'new_vision'
             );
             CREATE TABLE IF NOT EXISTS students (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
@@ -85,7 +86,7 @@ def init_db():
     else:
         cur = conn.cursor()
         for t in [
-            "CREATE TABLE IF NOT EXISTS teams (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE)",
+            "CREATE TABLE IF NOT EXISTS teams (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, class_name TEXT NOT NULL DEFAULT 'new_vision')",
             "CREATE TABLE IF NOT EXISTS students (id SERIAL PRIMARY KEY, name TEXT NOT NULL, team_id INTEGER NOT NULL REFERENCES teams(id))",
             "CREATE TABLE IF NOT EXISTS sessions (id SERIAL PRIMARY KEY, date TEXT NOT NULL, label TEXT)",
             "CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'student')",
@@ -109,6 +110,17 @@ def init_db():
             _commit(conn2)
         except Exception:
             _commit(conn2)
+
+    # Migration: add class_name to teams if missing
+    try:
+        if USE_SQLITE:
+            _exec(conn2, "ALTER TABLE teams ADD COLUMN class_name TEXT DEFAULT 'new_vision'")
+        else:
+            _exec(conn2, "ALTER TABLE teams ADD COLUMN IF NOT EXISTS class_name TEXT DEFAULT 'new_vision'")
+        _commit(conn2)
+    except Exception:
+        _commit(conn2)
+
     _close(conn2)
 
 # ─── Auth ───
@@ -152,11 +164,17 @@ def get_teachers_count():
     _close(conn)
     return row["cnt"]
 
+def get_classes():
+    return ["new_vision", "choueifat"]
+
 # ─── Teams & Students ───
 
-def get_teams():
+def get_teams(class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, "SELECT * FROM teams ORDER BY name")
+    if class_name:
+        cur = _exec(conn, _sql("SELECT * FROM teams WHERE class_name = ? ORDER BY name"), (class_name,))
+    else:
+        cur = _exec(conn, "SELECT * FROM teams ORDER BY name")
     rows = cur.fetchall()
     _close(conn)
     return rows
@@ -198,12 +216,19 @@ def remove_student(student_id):
     _commit(conn)
     _close(conn)
 
-def get_all_students():
+def get_all_students(class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, """
-        SELECT s.*, t.name as team_name FROM students s
-        JOIN teams t ON s.team_id = t.id ORDER BY t.name, s.name
-    """)
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT s.*, t.name as team_name FROM students s
+            JOIN teams t ON s.team_id = t.id
+            WHERE t.class_name = ? ORDER BY t.name, s.name
+        """), (class_name,))
+    else:
+        cur = _exec(conn, """
+            SELECT s.*, t.name as team_name FROM students s
+            JOIN teams t ON s.team_id = t.id ORDER BY t.name, s.name
+        """)
     rows = cur.fetchall()
     _close(conn)
     return rows
@@ -286,17 +311,28 @@ def save_entry(student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, p
     _commit(conn)
     _close(conn)
 
-def get_session_totals(session_id):
+def get_session_totals(session_id, class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, _sql("""
-        SELECT t.name as team_name,
-               COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
-               COALESCE(SUM(e.tilawah_pages), 0) as total_tilawah,
-               COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-               COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
-        FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
-        WHERE e.session_id = ? GROUP BY t.id ORDER BY t.name
-    """), (session_id,))
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.tilawah_pages), 0) as total_tilawah,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+            WHERE e.session_id = ? AND t.class_name = ? GROUP BY t.id ORDER BY t.name
+        """), (session_id, class_name))
+    else:
+        cur = _exec(conn, _sql("""
+            SELECT t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.tilawah_pages), 0) as total_tilawah,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+            WHERE e.session_id = ? GROUP BY t.id ORDER BY t.name
+        """), (session_id,))
     rows = cur.fetchall()
     _close(conn)
     return rows
@@ -313,221 +349,408 @@ def get_student_history(student_id):
     _close(conn)
     return rows
 
-def get_all_entries_for_session(session_id):
+def get_all_entries_for_session(session_id, class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, _sql("""
-        SELECT t.name as team_name, s.name as student_name,
-               e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
-               e.attended, e.misbehaviour_penalty, e.inactive_penalty
-        FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
-        WHERE e.session_id = ? ORDER BY t.name, s.name
-    """), (session_id,))
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT t.name as team_name, s.name as student_name,
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
+            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+            WHERE e.session_id = ? AND t.class_name = ? ORDER BY t.name, s.name
+        """), (session_id, class_name))
+    else:
+        cur = _exec(conn, _sql("""
+            SELECT t.name as team_name, s.name as student_name,
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
+            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+            WHERE e.session_id = ? ORDER BY t.name, s.name
+        """), (session_id,))
     rows = cur.fetchall()
     _close(conn)
     return rows
 
-def get_all_data_for_export():
+def get_all_data_for_export(class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, """
-        SELECT sess.date as session_date, sess.label as session_label,
-               t.name as team, s.name as student,
-               e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
-               e.attended, e.misbehaviour_penalty, e.inactive_penalty
-        FROM entries e JOIN students s ON e.student_id = s.id
-        JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
-        ORDER BY sess.id, t.name, s.name
-    """)
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT sess.date as session_date, sess.label as session_label,
+                   t.name as team, s.name as student,
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
+            FROM entries e JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+            WHERE t.class_name = ?
+            ORDER BY sess.id, t.name, s.name
+        """), (class_name,))
+    else:
+        cur = _exec(conn, """
+            SELECT sess.date as session_date, sess.label as session_label,
+                   t.name as team, s.name as student,
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
+            FROM entries e JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+            ORDER BY sess.id, t.name, s.name
+        """)
     rows = cur.fetchall()
     _close(conn)
     return rows
 
-def get_cumulative_points_by_session():
+def get_cumulative_points_by_session(class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, """
-        WITH team_sessions AS (
-            SELECT sess.id as session_id, sess.date, sess.label, t.name as team_name,
-                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as session_points,
-                   COALESCE(SUM(e.hifdh_pages), 0) as session_hifdh,
-                   COALESCE(SUM(e.tilawah_pages), 0) as session_tilawah,
-                   COALESCE(SUM(e.rabt_pages), 0) as session_rabt
-            FROM sessions sess CROSS JOIN teams t
-            LEFT JOIN students s ON s.team_id = t.id
-            LEFT JOIN entries e ON e.student_id = s.id AND e.session_id = sess.id
-            GROUP BY sess.id, t.id
-        )
-        SELECT session_id, date, label, team_name,
-               session_points, session_hifdh, session_tilawah, session_rabt,
-               SUM(session_points) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_points,
-               SUM(session_hifdh) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_hifdh,
-               SUM(session_tilawah) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_tilawah,
-               SUM(session_rabt) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_rabt
-        FROM team_sessions ORDER BY session_id, team_name
-    """)
+    if class_name:
+        cur = _exec(conn, _sql("""
+            WITH team_sessions AS (
+                SELECT sess.id as session_id, sess.date, sess.label, t.name as team_name,
+                       COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as session_points,
+                       COALESCE(SUM(e.hifdh_pages), 0) as session_hifdh,
+                       COALESCE(SUM(e.tilawah_pages), 0) as session_tilawah,
+                       COALESCE(SUM(e.rabt_pages), 0) as session_rabt
+                FROM sessions sess CROSS JOIN teams t
+                LEFT JOIN students s ON s.team_id = t.id
+                LEFT JOIN entries e ON e.student_id = s.id AND e.session_id = sess.id
+                WHERE t.class_name = ?
+                GROUP BY sess.id, t.id
+            )
+            SELECT session_id, date, label, team_name,
+                   session_points, session_hifdh, session_tilawah, session_rabt,
+                   SUM(session_points) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_points,
+                   SUM(session_hifdh) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_hifdh,
+                   SUM(session_tilawah) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_tilawah,
+                   SUM(session_rabt) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_rabt
+            FROM team_sessions ORDER BY session_id, team_name
+        """), (class_name,))
+    else:
+        cur = _exec(conn, """
+            WITH team_sessions AS (
+                SELECT sess.id as session_id, sess.date, sess.label, t.name as team_name,
+                       COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as session_points,
+                       COALESCE(SUM(e.hifdh_pages), 0) as session_hifdh,
+                       COALESCE(SUM(e.tilawah_pages), 0) as session_tilawah,
+                       COALESCE(SUM(e.rabt_pages), 0) as session_rabt
+                FROM sessions sess CROSS JOIN teams t
+                LEFT JOIN students s ON s.team_id = t.id
+                LEFT JOIN entries e ON e.student_id = s.id AND e.session_id = sess.id
+                GROUP BY sess.id, t.id
+            )
+            SELECT session_id, date, label, team_name,
+                   session_points, session_hifdh, session_tilawah, session_rabt,
+                   SUM(session_points) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_points,
+                   SUM(session_hifdh) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_hifdh,
+                   SUM(session_tilawah) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_tilawah,
+                   SUM(session_rabt) OVER (PARTITION BY team_name ORDER BY session_id) as cumulative_rabt
+            FROM team_sessions ORDER BY session_id, team_name
+        """)
     rows = cur.fetchall()
     _close(conn)
     return rows
 
-def get_cumulative_team_totals():
+def get_cumulative_team_totals(class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, """
-        SELECT t.name as team_name,
-               COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
-               COALESCE(SUM(e.tilawah_pages), 0) as total_tilawah,
-               COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-               COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
-        FROM teams t LEFT JOIN students s ON s.team_id = t.id LEFT JOIN entries e ON e.student_id = s.id
-        GROUP BY t.id ORDER BY total_points DESC
-    """)
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.tilawah_pages), 0) as total_tilawah,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+            FROM teams t LEFT JOIN students s ON s.team_id = t.id LEFT JOIN entries e ON e.student_id = s.id
+            WHERE t.class_name = ?
+            GROUP BY t.id ORDER BY total_points DESC
+        """), (class_name,))
+    else:
+        cur = _exec(conn, """
+            SELECT t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.tilawah_pages), 0) as total_tilawah,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+            FROM teams t LEFT JOIN students s ON s.team_id = t.id LEFT JOIN entries e ON e.student_id = s.id
+            GROUP BY t.id ORDER BY total_points DESC
+        """)
     rows = cur.fetchall()
     _close(conn)
     return rows
 
-def get_top_memorizers(session_id):
+def get_top_memorizers(session_id, class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, _sql("""
-        SELECT s.name as student_name, t.name as team_name,
-               e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages
-        FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
-        WHERE e.session_id = ? AND e.hifdh_pages > 0 ORDER BY e.hifdh_pages DESC
-    """), (session_id,))
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages
+            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+            WHERE e.session_id = ? AND e.hifdh_pages > 0 AND t.class_name = ? ORDER BY e.hifdh_pages DESC
+        """), (session_id, class_name))
+    else:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages
+            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+            WHERE e.session_id = ? AND e.hifdh_pages > 0 ORDER BY e.hifdh_pages DESC
+        """), (session_id,))
     rows = cur.fetchall()
     _close(conn)
     return rows
 
-def get_all_entries_raw():
+def get_all_entries_raw(class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, "SELECT id, student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty FROM entries ORDER BY id")
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT e.id, e.student_id, e.session_id, e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages, e.attended, e.misbehaviour_penalty, e.inactive_penalty
+            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+            WHERE t.class_name = ? ORDER BY e.id
+        """), (class_name,))
+    else:
+        cur = _exec(conn, "SELECT id, student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty FROM entries ORDER BY id")
     rows = cur.fetchall()
     _close(conn)
     return rows
 
-def add_team(name):
+def add_team(name, class_name='new_vision'):
     conn = _get_conn()
     ret = "" if USE_SQLITE else " RETURNING id"
-    cur = _exec(conn, _sql(f"INSERT INTO teams (name) VALUES (?){ret}"), (name,))
+    cur = _exec(conn, _sql(f"INSERT INTO teams (name, class_name) VALUES (?, ?){ret}"), (name, class_name))
     team_id = cur.lastrowid if USE_SQLITE else cur.fetchone()["id"]
     _commit(conn)
     _close(conn)
     return team_id
 
-def get_weekly_top_hifdh(since_date):
+def get_weekly_top_hifdh(since_date, class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, _sql("""
-        SELECT s.name as student_name, t.name as team_name,
-               COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
-               COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-               COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
-        FROM entries e
-        JOIN students s ON e.student_id = s.id
-        JOIN teams t ON s.team_id = t.id
-        JOIN sessions sess ON e.session_id = sess.id
-        WHERE sess.date >= ? AND e.hifdh_pages > 0
-        GROUP BY e.student_id
-        ORDER BY total_hifdh DESC
-    """), (since_date,))
-    rows = cur.fetchall()
-    _close(conn)
-    return rows
-
-def get_weekly_top_rabt(since_date):
-    conn = _get_conn()
-    cur = _exec(conn, _sql("""
-        SELECT s.name as student_name, t.name as team_name,
-               COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
-               COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-               COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
-        FROM entries e
-        JOIN students s ON e.student_id = s.id
-        JOIN teams t ON s.team_id = t.id
-        JOIN sessions sess ON e.session_id = sess.id
-        WHERE sess.date >= ? AND e.rabt_pages > 0
-        GROUP BY e.student_id
-        ORDER BY total_rabt DESC
-    """), (since_date,))
-    rows = cur.fetchall()
-    _close(conn)
-    return rows
-
-def get_student_anam_all():
-    conn = _get_conn()
-    cur = _exec(conn, """
-        SELECT s.name as student_name, t.name as team_name,
-               COALESCE(SUM(e.surah_anam_pages), 0) as total_anam,
-               COUNT(DISTINCT e.session_id) as session_count
-        FROM students s
-        JOIN teams t ON s.team_id = t.id
-        LEFT JOIN entries e ON e.student_id = s.id
-        GROUP BY s.id
-        ORDER BY total_anam DESC
-    """)
-    rows = cur.fetchall()
-    _close(conn)
-    return rows
-
-def get_student_anam_weekly(since_date):
-    conn = _get_conn()
-    cur = _exec(conn, _sql("""
-        SELECT s.name as student_name, t.name as team_name,
-               COALESCE(sub.total, 0) as total_anam,
-               COALESCE(sub.cnt, 0) as session_count
-        FROM students s
-        JOIN teams t ON s.team_id = t.id
-        LEFT JOIN (
-            SELECT e.student_id,
-                   SUM(e.surah_anam_pages) as total,
-                   COUNT(DISTINCT e.session_id) as cnt
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
             FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
             JOIN sessions sess ON e.session_id = sess.id
-            WHERE sess.date >= ?
+            WHERE sess.date >= ? AND e.hifdh_pages > 0 AND t.class_name = ?
             GROUP BY e.student_id
-        ) sub ON sub.student_id = s.id
-        ORDER BY total_anam DESC
-    """), (since_date,))
-    rows = cur.fetchall()
-    _close(conn)
-    return rows
-
-def get_student_anam_daily(date):
-    conn = _get_conn()
-    cur = _exec(conn, _sql("""
-        SELECT s.name as student_name, t.name as team_name,
-               COALESCE(sub.total, 0) as total_anam,
-               sub.session_label, sub.session_date
-        FROM students s
-        JOIN teams t ON s.team_id = t.id
-        LEFT JOIN (
-            SELECT e.student_id,
-                   SUM(e.surah_anam_pages) as total,
-                   sess.label as session_label,
-                   sess.date as session_date
+            ORDER BY total_hifdh DESC
+        """), (since_date, class_name))
+    else:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
             FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
             JOIN sessions sess ON e.session_id = sess.id
-            WHERE sess.date = ?
+            WHERE sess.date >= ? AND e.hifdh_pages > 0
             GROUP BY e.student_id
-        ) sub ON sub.student_id = s.id
-        ORDER BY total_anam DESC
-    """), (date,))
+            ORDER BY total_hifdh DESC
+        """), (since_date,))
     rows = cur.fetchall()
     _close(conn)
     return rows
 
-def get_hifdh_leaders_all_sessions():
+def get_weekly_top_rabt(since_date, class_name=None):
     conn = _get_conn()
-    cur = _exec(conn, """
-        WITH ranked AS (
-            SELECT sess.id as session_id, sess.date, sess.label,
-                   s.name as student_name, t.name as team_name, e.hifdh_pages,
-                   ROW_NUMBER() OVER (PARTITION BY sess.id ORDER BY e.hifdh_pages DESC) as rn
-            FROM entries e JOIN students s ON e.student_id = s.id
-            JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
-            WHERE e.hifdh_pages > 0
-        )
-        SELECT session_id, date, label, student_name, team_name, hifdh_pages
-        FROM ranked WHERE rn = 1 ORDER BY session_id
-    """)
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            JOIN sessions sess ON e.session_id = sess.id
+            WHERE sess.date >= ? AND e.rabt_pages > 0 AND t.class_name = ?
+            GROUP BY e.student_id
+            ORDER BY total_rabt DESC
+        """), (since_date, class_name))
+    else:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
+                   COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            JOIN sessions sess ON e.session_id = sess.id
+            WHERE sess.date >= ? AND e.rabt_pages > 0
+            GROUP BY e.student_id
+            ORDER BY total_rabt DESC
+        """), (since_date,))
     rows = cur.fetchall()
     _close(conn)
     return rows
+
+def get_student_anam_all(class_name=None):
+    conn = _get_conn()
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(SUM(e.surah_anam_pages), 0) as total_anam,
+                   COUNT(DISTINCT e.session_id) as session_count
+            FROM students s
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN entries e ON e.student_id = s.id
+            WHERE t.class_name = ?
+            GROUP BY s.id
+            ORDER BY total_anam DESC
+        """), (class_name,))
+    else:
+        cur = _exec(conn, """
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(SUM(e.surah_anam_pages), 0) as total_anam,
+                   COUNT(DISTINCT e.session_id) as session_count
+            FROM students s
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN entries e ON e.student_id = s.id
+            GROUP BY s.id
+            ORDER BY total_anam DESC
+        """)
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+def get_student_anam_weekly(since_date, class_name=None):
+    conn = _get_conn()
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(sub.total, 0) as total_anam,
+                   COALESCE(sub.cnt, 0) as session_count
+            FROM students s
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN (
+                SELECT e.student_id,
+                       SUM(e.surah_anam_pages) as total,
+                       COUNT(DISTINCT e.session_id) as cnt
+                FROM entries e
+                JOIN sessions sess ON e.session_id = sess.id
+                WHERE sess.date >= ?
+                GROUP BY e.student_id
+            ) sub ON sub.student_id = s.id
+            WHERE t.class_name = ?
+            ORDER BY total_anam DESC
+        """), (since_date, class_name))
+    else:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(sub.total, 0) as total_anam,
+                   COALESCE(sub.cnt, 0) as session_count
+            FROM students s
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN (
+                SELECT e.student_id,
+                       SUM(e.surah_anam_pages) as total,
+                       COUNT(DISTINCT e.session_id) as cnt
+                FROM entries e
+                JOIN sessions sess ON e.session_id = sess.id
+                WHERE sess.date >= ?
+                GROUP BY e.student_id
+            ) sub ON sub.student_id = s.id
+            ORDER BY total_anam DESC
+        """), (since_date,))
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+def get_student_anam_daily(date, class_name=None):
+    conn = _get_conn()
+    if class_name:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(sub.total, 0) as total_anam,
+                   sub.session_label, sub.session_date
+            FROM students s
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN (
+                SELECT e.student_id,
+                       SUM(e.surah_anam_pages) as total,
+                       sess.label as session_label,
+                       sess.date as session_date
+                FROM entries e
+                JOIN sessions sess ON e.session_id = sess.id
+                WHERE sess.date = ?
+                GROUP BY e.student_id
+            ) sub ON sub.student_id = s.id
+            WHERE t.class_name = ?
+            ORDER BY total_anam DESC
+        """), (date, class_name))
+    else:
+        cur = _exec(conn, _sql("""
+            SELECT s.name as student_name, t.name as team_name,
+                   COALESCE(sub.total, 0) as total_anam,
+                   sub.session_label, sub.session_date
+            FROM students s
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN (
+                SELECT e.student_id,
+                       SUM(e.surah_anam_pages) as total,
+                       sess.label as session_label,
+                       sess.date as session_date
+                FROM entries e
+                JOIN sessions sess ON e.session_id = sess.id
+                WHERE sess.date = ?
+                GROUP BY e.student_id
+            ) sub ON sub.student_id = s.id
+            ORDER BY total_anam DESC
+        """), (date,))
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+def get_hifdh_leaders_all_sessions(class_name=None):
+    conn = _get_conn()
+    if class_name:
+        cur = _exec(conn, _sql("""
+            WITH ranked AS (
+                SELECT sess.id as session_id, sess.date, sess.label,
+                       s.name as student_name, t.name as team_name, e.hifdh_pages,
+                       ROW_NUMBER() OVER (PARTITION BY sess.id ORDER BY e.hifdh_pages DESC) as rn
+                FROM entries e JOIN students s ON e.student_id = s.id
+                JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+                WHERE e.hifdh_pages > 0 AND t.class_name = ?
+            )
+            SELECT session_id, date, label, student_name, team_name, hifdh_pages
+            FROM ranked WHERE rn = 1 ORDER BY session_id
+        """), (class_name,))
+    else:
+        cur = _exec(conn, """
+            WITH ranked AS (
+                SELECT sess.id as session_id, sess.date, sess.label,
+                       s.name as student_name, t.name as team_name, e.hifdh_pages,
+                       ROW_NUMBER() OVER (PARTITION BY sess.id ORDER BY e.hifdh_pages DESC) as rn
+                FROM entries e JOIN students s ON e.student_id = s.id
+                JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+                WHERE e.hifdh_pages > 0
+            )
+            SELECT session_id, date, label, student_name, team_name, hifdh_pages
+            FROM ranked WHERE rn = 1 ORDER BY session_id
+        """)
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+# ─── Seeding ───
+
+def seed_choueifat():
+    choueifat_teams = get_teams(class_name="choueifat")
+    if choueifat_teams:
+        return
+
+    teams_data = {
+        "فريق A": ["حمزة صباغ", "فارس بقاعي", "محمد محفوظ", "سامي العظمة", "وليد عودة", "فدى بارودي"],
+        "فريق B": ["محمد قواص", "موفق الجابي", "نزار موصلي", "سامي سكر", "أحمد عمري", "جواد سلامة", "سمير محايري"],
+        "فريق C": ["علي ايتوني", "ممتاز الخطيب", "عمر سيروان", "كريم الطير", "كنان اسطواني", "كريم غبرة"],
+    }
+
+    for team_name, students in teams_data.items():
+        team_id = add_team(team_name, class_name="choueifat")
+        for student_name in students:
+            add_student(student_name, team_id)
 
 if __name__ == "__main__":
     init_db()

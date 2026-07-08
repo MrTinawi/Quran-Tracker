@@ -732,6 +732,12 @@ body {
       <h1>MONOPOLY</h1>
     </div>
     <div class="logo-ribbon">مسابقة الحفظ</div>
+    <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center; justify-content: center;">
+      <select id="classSelector" onchange="switchClass(this.value)" style="font-family: 'Cairo', sans-serif; font-weight: 800; padding: 6px 14px; border: 3px solid #000; border-radius: 6px; background: #fff; box-shadow: 3px 3px 0px rgba(0,0,0,0.8); cursor: pointer; font-size: 0.9rem;">
+        <option value="new_vision">نيو فيجن</option>
+        <option value="choueifat">الشويفات</option>
+      </select>
+    </div>
   </div>
 
   <!-- Main Board Center wrapper -->
@@ -924,11 +930,7 @@ function resetTimer() {
 }
 
 // ─── Data & Effects ───
-const TEAM_MAP = {
-  'نجوم ال MMS': { short: 'A', color: '#c41e3a', index: 0 },
-  'تاج النور':   { short: 'B', color: '#b8962e', index: 1 },
-  'قيادة العمليات العسكرية': { short: 'C', color: '#1e90ff', index: 2 },
-};
+const TEAM_COLORS = ['#c41e3a', '#b8962e', '#1e90ff', '#27ae60', '#8e44ad', '#e67e22', '#2c3e50', '#e74c3c'];
 
 let pagesChart = null;
 let prevHifdh = {};
@@ -1013,7 +1015,8 @@ function updateLeaderboard(data) {
   data.sort((a, b) => b.total_points - a.total_points);
 
   container.innerHTML = data.map((team, i) => {
-    const meta = TEAM_MAP[team.team_name] || { index: i, color: '#888' };
+    const color = TEAM_COLORS[i % TEAM_COLORS.length];
+    const meta = { index: i, color };
     const hifdh = team.total_hifdh;
     
     // Standard property rent card pricing
@@ -1092,16 +1095,16 @@ function updateChart(data) {
     const teamData = data.filter(d => d.team_name === team);
     const cumMap = {};
     teamData.forEach(d => { cumMap[d.date] = d.cumulative_hifdh; });
-    const meta = TEAM_MAP[team] || { color: '#888' };
+    const color = TEAM_COLORS[teams.indexOf(team) % TEAM_COLORS.length];
     return {
       label: team,
       data: sessions.map(s => cumMap[s] || 0),
-      borderColor: meta.color,
-      backgroundColor: meta.color + '15',
+      borderColor: color,
+      backgroundColor: color + '15',
       fill: true,
       tension: 0.4,
       borderWidth: 5,
-      pointBackgroundColor: meta.color,
+      pointBackgroundColor: color,
       pointBorderColor: '#ffffff',
       pointBorderWidth: 3,
     };
@@ -1145,9 +1148,8 @@ function updateChart(data) {
               label: function(context) {
                 const team = context.dataset.label;
                 const pages = context.parsed.y;
-                const emojis = {'نجوم ال MMS': '🔴', 'تاج النور': '🟡', 'قيادة العمليات العسكرية': '🔵'};
                 const cheer = pages >= 3 ? '🔥 البطل!' : pages >= 2 ? '🚀 رائع!' : '🌟 مستمر!';
-                return ` ${emojis[team] || ''} ${team}: ${pages} صفحة ${cheer}`;
+                return ` ${team}: ${pages} صفحة ${cheer}`;
               }
             }
           }
@@ -1196,12 +1198,25 @@ function updateChart(data) {
 }
 
 const API_BASE = new URLSearchParams(window.location.search).get('api') || '';
+const CLASS_NAME = new URLSearchParams(window.location.search).get('class') || 'new_vision';
+const CLASS_QS = 'class=' + encodeURIComponent(CLASS_NAME);
+
+function switchClass(value) {
+  const params = new URLSearchParams(window.location.search);
+  params.set('class', value);
+  window.location.search = params.toString();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const sel = document.getElementById('classSelector');
+  if (sel) sel.value = CLASS_NAME;
+});
 
 async function fetchWeeklyWinners() {
   try {
     const [hifdhRes, rabtRes] = await Promise.all([
-      fetch(API_BASE + '/api/weekly-hifdh'),
-      fetch(API_BASE + '/api/weekly-rabt'),
+      fetch(API_BASE + '/api/weekly-hifdh?' + CLASS_QS),
+      fetch(API_BASE + '/api/weekly-rabt?' + CLASS_QS),
     ]);
     const hifdhData = await hifdhRes.json();
     const rabtData = await rabtRes.json();
@@ -1257,8 +1272,8 @@ async function fetchWeeklyWinners() {
 async function fetchData() {
   try {
     const [leaderboardRes, historyRes] = await Promise.all([
-      fetch(API_BASE + '/api/leaderboard'),
-      fetch(API_BASE + '/api/pages-history'),
+      fetch(API_BASE + '/api/leaderboard?' + CLASS_QS),
+      fetch(API_BASE + '/api/pages-history?' + CLASS_QS),
     ]);
     const leaderboard = await leaderboardRes.json();
     const history = await historyRes.json();
@@ -1298,12 +1313,12 @@ async function fetchAnamData(view) {
   try {
     let url;
     if (view === 'week') {
-      url = API_BASE + '/api/anam/weekly';
+      url = API_BASE + '/api/anam/weekly?' + CLASS_QS;
     } else if (view === 'day') {
       const date = document.getElementById('anamDatePicker').value || new Date().toISOString().split('T')[0];
-      url = API_BASE + '/api/anam/daily?date=' + encodeURIComponent(date);
+      url = API_BASE + '/api/anam/daily?date=' + encodeURIComponent(date) + '&' + CLASS_QS;
     } else {
-      url = API_BASE + '/api/anam/overall';
+      url = API_BASE + '/api/anam/overall?' + CLASS_QS;
     }
     const res = await fetch(url);
     const data = await res.json();
