@@ -8,6 +8,9 @@ from flask_cors import CORS
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import database
 
+database.init_db()
+database.seed_choueifat()
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 CORS(app, supports_credentials=True)
@@ -216,5 +219,4 @@ def admin_db_js():
     return send_from_directory(QURAN_TRACKER_DIR, "db.js")
 
 if __name__ == "__main__":
-    database.init_db()
     app.run(host="0.0.0.0", port=5000, debug=False)
