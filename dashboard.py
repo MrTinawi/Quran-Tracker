@@ -134,6 +134,16 @@ def api_student_history(student_id):
     rows = database.get_student_history(student_id)
     return jsonify([dict(r) for r in rows])
 
+@app.route("/api/surahs")
+def api_surahs():
+    rows = database.get_surahs()
+    return jsonify([dict(r) for r in rows])
+
+@app.route("/api/students/<int:student_id>/current-surah")
+def api_student_current_surah(student_id):
+    row = database.get_student_current_surah(student_id)
+    return jsonify(dict(row) if row else {})
+
 # ─── Full data export (data.json shape) ───
 
 @app.route("/api/data")
@@ -167,7 +177,12 @@ def api_save_entry():
             float(data.get("rabt_pages", 0)),
             int(data.get("points", 0)),
             data.get("notes", ""),
+            surah_id=int(data["surah_id"]) if data.get("surah_id") else None,
+            start_ayah=int(data["start_ayah"]) if data.get("start_ayah") else None,
+            end_ayah=int(data["end_ayah"]) if data.get("end_ayah") else None,
         )
+        if data.get("surah_id"):
+            database.set_student_current_surah(int(data["student_id"]), int(data["surah_id"]))
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 400

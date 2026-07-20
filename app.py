@@ -46,6 +46,15 @@ TEXTS = {
     "misbehaviour_penalty": "خصم سوء السلوك (نقاط)",
     "inactive_penalty": "خصم الحضور بدون عمل (نقاط)",
     "rabt": "ربط (صفحات)",
+    "surah": "السورة",
+    "select_surah": "اختر السورة",
+    "start_ayah": "من الآية",
+    "end_ayah": "إلى الآية",
+    "ayah_range": "الآيات (من - إلى)",
+    "current_surah": "السورة الحالية",
+    "team_export": "تصدير بيانات الفريق",
+    "export_team_csv": "📥 تصدير بيانات فريقي (CSV)",
+    "send_to_captain": "أرسل هذا الملف إلى كابتن الفريق",
     "points": "النقاط (💲)",
     "notes": "ملاحظات",
     "save": "💾 حفظ",
@@ -234,7 +243,7 @@ if "current_team" not in st.session_state:
 if "current_student" not in st.session_state:
     st.session_state.current_student = None
 
-tabs = st.tabs([_("data_entry"), _("team_totals"), _("session_report"), _("analysis"), _("export"), _("best_memorizers"), _("weekly_winners")])
+tabs = st.tabs([_("data_entry"), _("team_totals"), _("session_report"), _("analysis"), _("export"), _("team_export"), _("best_memorizers"), _("weekly_winners")])
 
 # ═══════════════════════════════════════════
 # TAB 1: DATA ENTRY
@@ -265,13 +274,57 @@ with tabs[0]:
     with col2:
         st.subheader(f"{selected_student_name} - {selected_team_name}")
 
-        existing = database.get_entry(student_id, session_id)
+        # Show current surah for this student
+        current = database.get_student_current_surah(student_id)
+        if current and current["surah_name"]:
+            st.caption(f"{_('current_surah')}: **{current['surah_name']}** ({current['ayah_count']} آية)")
+
+        existing_row = database.get_entry(student_id, session_id)
+        existing = dict(existing_row) if existing_row else None
 
         hifdh = st.number_input(
             _("hifdh"), min_value=0.0, step=0.25,
             value=float(existing["hifdh_pages"]) if existing else 0.0,
             key=f"hifdh_{student_id}_{session_id}"
         )
+
+        # Surah & Ayah section
+        surahs = database.get_surahs()
+        surah_options = {f"{s['id']}. {s['name']} ({s['ayah_count']} آية)": s["id"] for s in surahs}
+
+        default_surah_index = 0
+        if existing and existing.get("surah_id"):
+            for i, (k, v) in enumerate(surah_options.items()):
+                if v == existing["surah_id"]:
+                    default_surah_index = i
+                    break
+        elif current and current["surah_name"]:
+            for i, (k, v) in enumerate(surah_options.items()):
+                if v == current["current_surah_id"]:
+                    default_surah_index = i
+                    break
+
+        selected_surah_key = st.selectbox(
+            _("select_surah"), list(surah_options.keys()),
+            index=default_surah_index,
+            key=f"surah_{student_id}_{session_id}"
+        )
+        selected_surah_id = surah_options[selected_surah_key]
+
+        col_a1, col_a2 = st.columns(2)
+        with col_a1:
+            start_ayah = st.number_input(
+                _("start_ayah"), min_value=1, step=1,
+                value=int(existing["start_ayah"]) if existing and existing.get("start_ayah") else 1,
+                key=f"start_{student_id}_{session_id}"
+            )
+        with col_a2:
+            end_ayah = st.number_input(
+                _("end_ayah"), min_value=1, step=1,
+                value=int(existing["end_ayah"]) if existing and existing.get("end_ayah") else 1,
+                key=f"end_{student_id}_{session_id}"
+            )
+
         tilawah = st.number_input(
             _("tilawah"), min_value=0.0, step=0.25,
             value=float(existing["tilawah_pages"]) if existing else 0.0,
@@ -327,7 +380,9 @@ with tabs[0]:
                 st.error("غير مسموح بالتعديل. فقط المشرفون يمكنهم حفظ البيانات.")
             else:
                 database.save_entry(student_id, session_id, hifdh, tilawah, rabt, points, notes, surah_anam,
-                                    int(attended), misbehaviour_penalty, inactive_penalty)
+                                    int(attended), misbehaviour_penalty, inactive_penalty,
+                                    selected_surah_id, start_ayah, end_ayah)
+                database.set_student_current_surah(student_id, selected_surah_id)
                 st.success(_("saved"))
 
     # Student history below
@@ -337,6 +392,9 @@ with tabs[0]:
         hist_df = pd.DataFrame([{
             "التاريخ": h["date"],
             "الجلسة": h["label"],
+            "السورة": h["surah_name"] if h["surah_name"] else "",
+            "من آية": int(h["start_ayah"]) if h["start_ayah"] else "",
+            "إلى آية": int(h["end_ayah"]) if h["end_ayah"] else "",
             "حفظ": h["hifdh_pages"],
             "تلاوة": h["tilawah_pages"],
             "الأنعام": h["surah_anam_pages"],
@@ -448,6 +506,9 @@ with tabs[2]:
         report_df = pd.DataFrame([{
             _("team"): e["team_name"],
             _("student"): e["student_name"],
+            "السورة": e["surah_name"] if e["surah_name"] else "",
+            "من آية": int(e["start_ayah"]) if e["start_ayah"] else "",
+            "إلى آية": int(e["end_ayah"]) if e["end_ayah"] else "",
             _("hifdh"): e["hifdh_pages"],
             _("tilawah"): e["tilawah_pages"],
             "الأنعام": e["surah_anam_pages"],
@@ -554,6 +615,9 @@ with tabs[4]:
             "الجلسة": e["session_label"],
             "الفريق": e["team"],
             "الطالب": e["student"],
+            "السورة": e["surah_name"] if e["surah_name"] else "",
+            "من آية": int(e["start_ayah"]) if e["start_ayah"] else "",
+            "إلى آية": int(e["end_ayah"]) if e["end_ayah"] else "",
             "حفظ (صفحات)": e["hifdh_pages"],
             "تلاوة (صفحات)": e["tilawah_pages"],
             "الأنعام (صفحات)": e["surah_anam_pages"],
@@ -580,9 +644,49 @@ with tabs[4]:
         st.info(_("no_data"))
 
 # ═══════════════════════════════════════════
-# TAB 6: BEST MEMORIZERS (WEEKLY)
+# TAB 6: TEAM CAPTAIN EXPORT
 # ═══════════════════════════════════════════
 with tabs[5]:
+    st.subheader(_("team_export"))
+    st.caption(_("send_to_captain"))
+
+    teams = database.get_teams(class_name=class_name)
+    for team in teams:
+        team_data = database.get_team_export_data(team["id"])
+        if team_data:
+            team_df = pd.DataFrame([{
+                "التاريخ": e["session_date"],
+                "الجلسة": e["session_label"],
+                "الطالب": e["student"],
+                "السورة": e["surah_name"] if e["surah_name"] else "",
+                "من آية": int(e["start_ayah"]) if e["start_ayah"] else "",
+                "إلى آية": int(e["end_ayah"]) if e["end_ayah"] else "",
+                "حفظ (صفحات)": e["hifdh_pages"],
+                "تلاوة (صفحات)": e["tilawah_pages"],
+                "ربط (صفحات)": e["rabt_pages"],
+                "النقاط": e["points"],
+                "حضور": "نعم" if e["attended"] else "لا",
+                "ملاحظات": e["notes"],
+            } for e in team_data])
+
+            csv = team_df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                label=f"{_('export_team_csv')} - {team['name']}",
+                data=csv,
+                file_name=f"team_{team['name']}_data.csv",
+                mime="text/csv",
+                type="primary",
+                use_container_width=True,
+                key=f"team_export_{team['id']}"
+            )
+
+    if not teams:
+        st.info(_("no_data"))
+
+# ═══════════════════════════════════════════
+# TAB 7: BEST MEMORIZERS (WEEKLY)
+# ═══════════════════════════════════════════
+with tabs[6]:
     st.subheader(_("best_memorizers"))
 
     sess_for_hifdh = st.selectbox(
@@ -647,9 +751,9 @@ with tabs[5]:
         st.info(_("no_data"))
 
 # ═══════════════════════════════════════════
-# TAB 7: WEEKLY WINNERS
+# TAB 8: WEEKLY WINNERS
 # ═══════════════════════════════════════════
-with tabs[6]:
+with tabs[7]:
     st.subheader(_("weekly_winners"))
     st.caption(_("weekly_period"))
 
