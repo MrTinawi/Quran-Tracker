@@ -152,9 +152,36 @@ body {
   border-radius: 4px;
   white-space: nowrap;
   display: none;
+  z-index: 2;
 }
 .character-token:hover .token-label {
   display: block;
+}
+.character-token .remove-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #e94560;
+  color: #fff;
+  border: 2px solid #fff;
+  font-size: 0.65rem;
+  line-height: 14px;
+  text-align: center;
+  cursor: pointer;
+  display: none;
+  z-index: 3;
+  font-weight: 900;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+.character-token:hover .remove-btn {
+  display: block;
+}
+.character-token .remove-btn:hover {
+  background: #ff1d25;
+  transform: scale(1.2);
 }
 
 .palette {
@@ -535,9 +562,23 @@ function renderBoard() {
     label.textContent = state.team_name || ch.label;
     token.appendChild(label);
 
+    const removeBtn = document.createElement('span');
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '×';
+    removeBtn.title = 'إزالة من اللوحة';
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeCharacter(ch.name);
+    });
+    token.appendChild(removeBtn);
+
     token.addEventListener('mousedown', (e) => startDrag(e, ch.name));
     token.addEventListener('touchstart', (e) => startDragTouch(e, ch.name), { passive: false });
     token.addEventListener('dblclick', () => editCharacter(ch.name));
+    token.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (confirm(`إزالة ${ch.label} من اللوحة؟`)) removeCharacter(ch.name);
+    });
 
     overlay.appendChild(token);
   }
