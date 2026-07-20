@@ -10,6 +10,7 @@ import database
 
 database.init_db()
 database.seed_choueifat()
+database.seed_core()
 
 app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))

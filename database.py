@@ -362,7 +362,7 @@ def seed_default_characters(class_name="new_vision"):
             _close(conn)
 
 def get_classes():
-    return ["new_vision", "choueifat"]
+    return ["new_vision", "choueifat", "core"]
 
 # ─── Teams & Students ───
 
@@ -1044,6 +1044,22 @@ def seed_choueifat():
 
     for team_name, students in teams_data.items():
         team_id = add_team(team_name, class_name="choueifat")
+        for student_name in students:
+            add_student(student_name, team_id)
+
+def seed_core():
+    core_teams = get_teams(class_name="core")
+    if core_teams:
+        return
+
+    teams_data = {
+        "Team A": ["عمر سيروان", "فدى بارودي"],
+        "Team B": ["علي ايتوني", "كنان اسطواني"],
+        "Team C": ["محمد قواص", "فارس بقاعي"],
+    }
+
+    for team_name, students in teams_data.items():
+        team_id = add_team(team_name, class_name="core")
         for student_name in students:
             add_student(student_name, team_id)
 

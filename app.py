@@ -24,6 +24,7 @@ LANG = "ar"
 CLASS_LABELS = {
     "new_vision": "نيو فيجن",
     "choueifat": "الشويفات",
+    "core": "Core",
 }
 
 TEXTS = {
@@ -147,6 +148,8 @@ with st.sidebar:
         st.session_state.current_student = None
         if selected_class == "choueifat":
             database.seed_choueifat()
+        if selected_class == "core":
+            database.seed_core()
         st.rerun()
 
     class_name = st.session_state.class_name
