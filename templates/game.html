@@ -113,8 +113,8 @@ body {
 
 .slot-marker {
   position: absolute;
-  width: 3.2%;
-  height: 3.2%;
+  width: 2.8%;
+  height: 2.8%;
   border: 2px solid rgba(233, 69, 96, 0.35);
   border-radius: 50%;
   background: rgba(233, 69, 96, 0.06);
@@ -472,10 +472,10 @@ const POSITIONS = calcPositions();
 
 // 3 slots per position — offsets based on side, pointing toward board center
 const SLOT_OFFSETS = {
-  bottom: [{ dx: 0, dy: -24 }, { dx: -22, dy: -10 }, { dx: 22, dy: -10 }],
-  top:    [{ dx: 0, dy: 24 },  { dx: -22, dy: 10 },  { dx: 22, dy: 10 }],
-  right:  [{ dx: -24, dy: 0 }, { dx: -10, dy: -22 }, { dx: -10, dy: 22 }],
-  left:   [{ dx: 24, dy: 0 },  { dx: 10, dy: -22 },  { dx: 10, dy: 22 }],
+  bottom: [{ dx: 0, dy: -10 }, { dx: -12, dy: -4 }, { dx: 12, dy: -4 }],
+  top:    [{ dx: 0, dy: 10 },  { dx: -12, dy: 4 },  { dx: 12, dy: 4 }],
+  right:  [{ dx: -10, dy: 0 }, { dx: -4, dy: -12 }, { dx: -4, dy: 12 }],
+  left:   [{ dx: 10, dy: 0 },  { dx: 4, dy: -12 },  { dx: 4, dy: 12 }],
 };
 
 function getPosCenter(index) {
