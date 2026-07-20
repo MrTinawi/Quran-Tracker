@@ -11,7 +11,7 @@ import database
 database.init_db()
 database.seed_choueifat()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder=None)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
 CORS(app, supports_credentials=True)
 
@@ -232,6 +232,56 @@ def admin_panel():
 @app.route("/db.js")
 def admin_db_js():
     return send_from_directory(QURAN_TRACKER_DIR, "db.js")
+
+# ─── Game Board (Monopoly) ───
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    return send_from_directory(BASE_DIR, filename)
+
+@app.route("/board-image")
+def serve_board_image():
+    return send_from_directory(BASE_DIR, "Monopoly.jpg")
+
+@app.route("/game")
+def game_board():
+    return render_template("game.html")
+
+@app.route("/api/game/state", methods=["GET"])
+def api_game_state():
+    class_name = request.args.get("class", "new_vision")
+    rows = database.get_game_state(class_name)
+    return jsonify(rows)
+
+@app.route("/api/game/state", methods=["POST"])
+def api_game_save():
+    class_name = request.args.get("class", "new_vision")
+    data = request.get_json()
+    if not data or "characters" not in data:
+        return jsonify({"success": False, "error": "no characters"}), 400
+    for ch in data["characters"]:
+        database.save_game_state(
+            class_name=class_name,
+            character_name=ch["character_name"],
+            character_emoji=ch["character_emoji"],
+            team_name=ch.get("team_name", ""),
+            position_index=ch.get("position_index", 0),
+        )
+    return jsonify({"success": True})
+
+@app.route("/api/game/reset", methods=["POST"])
+def api_game_reset():
+    class_name = request.args.get("class", "new_vision")
+    database.reset_game_state(class_name)
+    return jsonify({"success": True})
+
+@app.route("/api/game/seed", methods=["POST"])
+def api_game_seed():
+    class_name = request.args.get("class", "new_vision")
+    database.seed_default_characters(class_name)
+    return jsonify({"success": True})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)

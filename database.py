@@ -255,6 +255,92 @@ def get_teachers_count():
     _close(conn)
     return row["cnt"]
 
+# ─── Game State (Monopoly Board) ───
+
+def init_game_table():
+    conn = _get_conn()
+    if USE_SQLITE:
+        _exec(conn, """
+            CREATE TABLE IF NOT EXISTS game_state (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                class_name TEXT NOT NULL DEFAULT 'new_vision',
+                character_name TEXT NOT NULL,
+                character_emoji TEXT NOT NULL,
+                team_name TEXT DEFAULT '',
+                position_index INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(class_name, character_name)
+            )
+        """)
+    else:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS game_state (
+                id SERIAL PRIMARY KEY,
+                class_name TEXT NOT NULL DEFAULT 'new_vision',
+                character_name TEXT NOT NULL,
+                character_emoji TEXT NOT NULL,
+                team_name TEXT DEFAULT '',
+                position_index INTEGER NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(class_name, character_name)
+            )
+        """)
+    _commit(conn)
+    _close(conn)
+
+def get_game_state(class_name="new_vision"):
+    init_game_table()
+    conn = _get_conn()
+    cur = _exec(conn, _sql("SELECT * FROM game_state WHERE class_name = ? ORDER BY id"), (class_name,))
+    rows = cur.fetchall()
+    _close(conn)
+    return [dict(r) for r in rows]
+
+def save_game_state(class_name, character_name, character_emoji, team_name, position_index):
+    init_game_table()
+    conn = _get_conn()
+    _exec(conn, _sql("""
+        INSERT INTO game_state (class_name, character_name, character_emoji, team_name, position_index, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(class_name, character_name) DO UPDATE SET
+            team_name = excluded.team_name,
+            position_index = excluded.position_index,
+            updated_at = datetime('now')
+    """), (class_name, character_name, character_emoji, team_name, position_index))
+    _commit(conn)
+    _close(conn)
+
+def reset_game_state(class_name="new_vision"):
+    init_game_table()
+    conn = _get_conn()
+    _exec(conn, _sql("DELETE FROM game_state WHERE class_name = ?"), (class_name,))
+    _commit(conn)
+    _close(conn)
+
+def seed_default_characters(class_name="new_vision"):
+    init_game_table()
+    defaults = [
+        ("crown",       "👑",  "الفريق الأول",   0),
+        ("padel",       "🏓",  "الفريق الثاني",  1),
+        ("gold_coin",   "🪙",  "الفريق الثالث",  2),
+        ("car",         "🚗",  "الفريق الرابع",  3),
+        ("book",        "📖",  "الفريق الخامس",  4),
+        ("star",         "⭐",  "الفريق السادس",  5),
+    ]
+    for name, emoji, team, pos in defaults:
+        conn = _get_conn()
+        try:
+            _exec(conn, _sql("""
+                INSERT INTO game_state (class_name, character_name, character_emoji, team_name, position_index)
+                VALUES (?, ?, ?, ?, ?)
+            """), (class_name, name, emoji, team, pos))
+            _commit(conn)
+        except Exception:
+            _commit(conn)
+        finally:
+            _close(conn)
+
 def get_classes():
     return ["new_vision", "choueifat"]
 

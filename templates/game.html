@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لعبة مونوبولي الحفظ</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Cairo', sans-serif;
+  background: #1a1a2e;
+  color: #fff;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+.header {
+  width: 100%;
+  text-align: center;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #16213e, #0f3460);
+  border-bottom: 3px solid #e94560;
+  position: relative;
+  z-index: 10;
+}
+.header h1 {
+  font-size: 1.8rem;
+  font-weight: 900;
+  color: #e94560;
+  text-shadow: 2px 2px 0 #000;
+  letter-spacing: 2px;
+}
+.header .subtitle {
+  color: #aaa;
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1300px;
+  padding: 8px 20px;
+  gap: 10px;
+  flex-wrap: wrap;
+  z-index: 10;
+}
+.top-bar select, .top-bar button {
+  font-family: 'Cairo', sans-serif;
+  font-weight: 700;
+  padding: 8px 16px;
+  border: 2px solid #e94560;
+  border-radius: 8px;
+  background: #16213e;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.top-bar select:hover, .top-bar button:hover {
+  background: #0f3460;
+  transform: translateY(-1px);
+}
+.top-bar button.primary {
+  background: #e94560;
+  color: #fff;
+  border-color: #e94560;
+}
+.top-bar button.primary:hover {
+  background: #ff6b81;
+}
+.top-bar button.danger {
+  background: #c0392b;
+  border-color: #c0392b;
+}
+.top-bar button.danger:hover {
+  background: #e74c3c;
+}
+
+.board-wrapper {
+  position: relative;
+  display: inline-block;
+  margin: 10px auto;
+  max-width: 95vw;
+  border: 4px solid #e94560;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+.board-wrapper img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  user-select: none;
+  pointer-events: none;
+}
+
+.board-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+.board-overlay > * {
+  pointer-events: auto;
+}
+
+.position-marker {
+  position: absolute;
+  width: 5.5%;
+  height: 5.5%;
+  border: 2px dashed rgba(233, 69, 96, 0.5);
+  border-radius: 4px;
+  background: rgba(233, 69, 96, 0.08);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6vw;
+  color: rgba(255,255,255,0.5);
+  font-weight: 700;
+  overflow: visible;
+}
+.position-marker:hover {
+  background: rgba(233, 69, 96, 0.25);
+  border-color: #e94560;
+  transform: scale(1.08);
+  z-index: 5;
+}
+.position-marker.active {
+  border-color: #2ecc71;
+  background: rgba(46, 204, 113, 0.2);
+}
+.position-marker .pos-num {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.3);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Character token placed on board */
+.character-token {
+  position: absolute;
+  font-size: 2.2vw;
+  cursor: grab;
+  z-index: 10;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  filter: drop-shadow(0 0 6px rgba(233,69,96,0.6));
+  user-select: none;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 5.5%;
+  height: 5.5%;
+}
+.character-token:active {
+  cursor: grabbing;
+  transform: scale(1.3);
+  z-index: 100;
+}
+.character-token .token-label {
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0,0,0,0.7);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  display: none;
+}
+.character-token:hover .token-label {
+  display: block;
+}
+
+/* Character palette */
+.palette {
+  width: 100%;
+  max-width: 1300px;
+  padding: 12px 20px;
+  margin-top: 10px;
+}
+.palette h3 {
+  text-align: center;
+  color: #e94560;
+  margin-bottom: 12px;
+  font-size: 1rem;
+}
+.character-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+.character-card {
+  background: #16213e;
+  border: 2px solid #0f3460;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: grab;
+  transition: all 0.2s;
+  min-width: 140px;
+}
+.character-card:hover {
+  border-color: #e94560;
+  background: #1a1a3e;
+  transform: translateY(-2px);
+}
+.character-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+.character-card .emoji {
+  font-size: 1.8rem;
+  width: 36px;
+  text-align: center;
+}
+.character-card .info {
+  flex: 1;
+}
+.character-card .info .name {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #fff;
+}
+.character-card .info .team {
+  font-size: 0.7rem;
+  color: #aaa;
+}
+.character-card .info .pos {
+  font-size: 0.65rem;
+  color: #e94560;
+}
+.character-card .controls {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.character-card .controls button {
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.6rem;
+  padding: 2px 8px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.character-card .controls button:hover {
+  background: #e94560;
+  color: #fff;
+  border-color: #e94560;
+}
+
+/* Modal */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open {
+  display: flex;
+}
+.modal {
+  background: #16213e;
+  border: 3px solid #e94560;
+  border-radius: 16px;
+  padding: 30px;
+  max-width: 400px;
+  width: 90%;
+  text-align: center;
+}
+.modal h2 {
+  color: #e94560;
+  margin-bottom: 20px;
+  font-size: 1.3rem;
+}
+.modal label {
+  display: block;
+  text-align: right;
+  margin-bottom: 6px;
+  font-weight: 700;
+  color: #ccc;
+  font-size: 0.85rem;
+}
+.modal input, .modal select {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 2px solid #0f3460;
+  border-radius: 8px;
+  background: #1a1a3e;
+  color: #fff;
+  font-family: 'Cairo', sans-serif;
+  font-size: 0.9rem;
+}
+.modal input:focus, .modal select:focus {
+  outline: none;
+  border-color: #e94560;
+}
+.modal .btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 10px;
+}
+.modal .btn-row button {
+  font-family: 'Cairo', sans-serif;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: 2px solid #e94560;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.modal .btn-row .save {
+  background: #e94560;
+  color: #fff;
+}
+.modal .btn-row .cancel {
+  background: transparent;
+  color: #aaa;
+  border-color: #555;
+}
+.modal .btn-row .save:hover { background: #ff6b81; }
+.modal .btn-row .cancel:hover { background: #333; color: #fff; }
+
+#statusMsg {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2ecc71;
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-weight: 700;
+  z-index: 2000;
+  display: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.legend {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.legend-item {
+  font-size: 0.65rem;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 768px) {
+  .header h1 { font-size: 1.2rem; }
+  .character-card { min-width: 100px; padding: 8px 10px; }
+  .character-card .emoji { font-size: 1.4rem; width: 28px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎲 لعبة مونوبولي الحفظ</h1>
+  <div class="subtitle">اسحب الشخصيات وضعها على اللوحة — كلما حفظ الفريق صفحات أكثر، تقدم قطعة واحدة</div>
+</div>
+
+<div class="top-bar">
+  <div style="display:flex;gap:8px;align-items:center;">
+    <select id="classSelector" onchange="loadGame()">
+      <option value="new_vision">نيو فيجن</option>
+      <option value="choueifat">الشويفات</option>
+    </select>
+    <button class="primary" onclick="saveAll()">💾 حفظ الكل</button>
+    <button onclick="loadGame()">🔄 تحديث</button>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <button class="danger" onclick="confirmReset()">🔄 إعادة تعيين</button>
+    <a href="/" style="color:#aaa;font-size:0.8rem;text-decoration:none;">← الرجوع للوحة القيادة</a>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="legend-item">🟥 منصة الانطلاق</span>
+  <span class="legend-item">🟩 موقع شخصية</span>
+  <span class="legend-item">👆 اسحب الشخصيات من الأسفل إلى اللوحة</span>
+</div>
+
+<div class="board-wrapper" id="boardWrapper">
+  <img src="/board-image" alt="Monopoly Board" id="boardImg" draggable="false">
+  <div class="board-overlay" id="boardOverlay">
+  </div>
+</div>
+
+<div class="palette">
+  <h3>🎭 الشخصيات — اسحب إلى اللوحة</h3>
+  <div class="character-grid" id="characterGrid"></div>
+</div>
+
+<div class="modal-overlay" id="teamModal">
+  <div class="modal">
+    <h2>تعديل الشخصية</h2>
+    <label>اسم الشخصية</label>
+    <input type="text" id="modalCharName" readonly disabled style="opacity:0.6;">
+    <label>رمز الشخصية</label>
+    <input type="text" id="modalCharEmoji" id="modalCharEmoji" readonly disabled style="opacity:0.6;text-align:center;font-size:2rem;">
+    <label>الفريق / التسمية</label>
+    <input type="text" id="modalTeamName" placeholder="مثال: الفريق الأول">
+    <label>رقم الموقع (0-39)</label>
+    <input type="number" id="modalPosition" min="0" max="39" placeholder="0">
+    <div class="btn-row">
+      <button class="save" onclick="saveCharacterFromModal()">💾 حفظ</button>
+      <button class="cancel" onclick="closeModal()">إلغاء</button>
+    </div>
+  </div>
+</div>
+
+<div id="statusMsg"></div>
+
+<script>
+const BOARD_W = 1280;
+const BOARD_H = 1277;
+
+const CHARACTERS = [
+  { name: 'crown',       emoji: '👑',  label: 'التاج' },
+  { name: 'padel',       emoji: '🏓',  label: 'مضرب البادل' },
+  { name: 'gold_coin',   emoji: '🪙',  label: 'عملة ذهبية' },
+  { name: 'car',         emoji: '🚗',  label: 'السيارة' },
+  { name: 'book',        emoji: '📖',  label: 'الكتاب' },
+  { name: 'star',        emoji: '⭐',  label: 'النجمة' },
+];
+
+// 40 positions around the board perimeter
+const MARGIN_X = 65;
+const MARGIN_Y = 60;
+const RIGHT = 1215;
+const BOTTOM = 1217;
+const TOP = 60;
+const LEFT = 65;
+
+function calcPositions() {
+  const positions = [];
+  const xStep = (RIGHT - LEFT) / 10;
+  const yStep = (BOTTOM - TOP) / 10;
+
+  // Bottom: left to right (pos 0-10)
+  for (let i = 0; i <= 10; i++) {
+    positions.push({
+      x: LEFT + i * xStep,
+      y: BOTTOM,
+      side: 'bottom',
+      index: positions.length
+    });
+  }
+  // Right: bottom to top (skip corner pos 10, start from pos 11)
+  for (let i = 1; i < 10; i++) {
+    positions.push({
+      x: RIGHT,
+      y: BOTTOM - i * yStep,
+      side: 'right',
+      index: positions.length
+    });
+  }
+  // Top: right to left (pos 20-30)
+  for (let i = 0; i <= 10; i++) {
+    positions.push({
+      x: RIGHT - i * xStep,
+      y: TOP,
+      side: 'top',
+      index: positions.length
+    });
+  }
+  // Left: top to bottom (skip corner pos 30, start from pos 31)
+  for (let i = 1; i < 10; i++) {
+    positions.push({
+      x: LEFT,
+      y: TOP + i * yStep,
+      side: 'left',
+      index: positions.length
+    });
+  }
+
+  return positions;
+}
+
+const POSITIONS = calcPositions();
+
+let gameState = {}; // character_name -> { team_name, position_index }
+let draggingChar = null;
+
+function getClass() {
+  return document.getElementById('classSelector').value;
+}
+
+function getApiBase() {
+  return window.location.origin;
+}
+
+function showStatus(msg, isError) {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.style.background = isError ? '#e74c3c' : '#2ecc71';
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+
+async function loadGame() {
+  const cls = getClass();
+  try {
+    const res = await fetch(`${getApiBase()}/api/game/state?class=${encodeURIComponent(cls)}`);
+    const data = await res.json();
+    gameState = {};
+    for (const ch of data) {
+      gameState[ch.character_name] = {
+        team_name: ch.team_name || '',
+        position_index: ch.position_index,
+        character_emoji: ch.character_emoji,
+      };
+    }
+    renderBoard();
+    renderPalette();
+  } catch (e) {
+    console.error('Load error:', e);
+    showStatus('خطأ في تحميل حالة اللعبة', true);
+  }
+}
+
+async function saveAll() {
+  const cls = getClass();
+  const payload = [];
+  for (const ch of CHARACTERS) {
+    const state = gameState[ch.name];
+    payload.push({
+      character_name: ch.name,
+      character_emoji: ch.emoji,
+      team_name: state ? state.team_name : '',
+      position_index: state ? state.position_index : 0,
+    });
+  }
+  try {
+    const res = await fetch(`${getApiBase()}/api/game/state?class=${encodeURIComponent(cls)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ characters: payload }),
+    });
+    const result = await res.json();
+    if (result.success) {
+      showStatus('✅ تم حفظ جميع الشخصيات!');
+    } else {
+      showStatus('❌ ' + (result.error || 'خطأ في الحفظ'), true);
+    }
+  } catch (e) {
+    showStatus('❌ خطأ في الاتصال', true);
+  }
+}
+
+async function confirmReset() {
+  if (!confirm('هل أنت متأكد؟ سيتم إعادة تعيين جميع مواقع الشخصيات.')) return;
+  const cls = getClass();
+  try {
+    await fetch(`${getApiBase()}/api/game/reset?class=${encodeURIComponent(cls)}`, { method: 'POST' });
+    // Seed defaults
+    await fetch(`${getApiBase()}/api/game/seed?class=${encodeURIComponent(cls)}`, { method: 'POST' });
+    showStatus('✅ تم إعادة التعيين');
+    loadGame();
+  } catch (e) {
+    showStatus('❌ خطأ في إعادة التعيين', true);
+  }
+}
+
+function getScaledPos(posIndex) {
+  const wrapper = document.getElementById('boardWrapper');
+  const img = document.getElementById('boardImg');
+  if (!wrapper || !img) return { x: 0, y: 0 };
+
+  const rect = img.getBoundingClientRect();
+  const scaleX = rect.width / BOARD_W;
+  const scaleY = rect.height / BOARD_H;
+  const wrapperRect = wrapper.getBoundingClientRect();
+
+  const p = POSITIONS[posIndex];
+  if (!p) return { x: 0, y: 0 };
+
+  return {
+    x: p.x * scaleX,
+    y: p.y * scaleY,
+    scaleX,
+    scaleY,
+    containerW: rect.width,
+    containerH: rect.height,
+  };
+}
+
+function renderBoard() {
+  const overlay = document.getElementById('boardOverlay');
+  overlay.innerHTML = '';
+
+  // Position markers
+  for (let i = 0; i < POSITIONS.length; i++) {
+    const p = POSITIONS[i];
+    const marker = document.createElement('div');
+    marker.className = 'position-marker';
+    marker.dataset.index = i;
+    marker.style.left = (p.x / BOARD_W * 100) + '%';
+    marker.style.top = (p.y / BOARD_H * 100) + '%';
+    marker.style.transform = 'translate(-50%, -50%)';
+
+    const numLabel = document.createElement('span');
+    numLabel.className = 'pos-num';
+    numLabel.textContent = i;
+    marker.appendChild(numLabel);
+
+    marker.addEventListener('click', () => {
+      openModalForPosition(i);
+    });
+
+    overlay.appendChild(marker);
+  }
+
+  // Character tokens on board
+  for (const ch of CHARACTERS) {
+    const state = gameState[ch.name];
+    if (!state) continue;
+    const posIdx = state.position_index;
+    const pos = POSITIONS[posIdx];
+    if (!pos) continue;
+
+    const token = document.createElement('div');
+    token.className = 'character-token';
+    token.dataset.charName = ch.name;
+    token.textContent = ch.emoji;
+
+    token.style.left = (pos.x / BOARD_W * 100) + '%';
+    token.style.top = (pos.y / BOARD_H * 100) + '%';
+    token.style.transform = 'translate(-50%, -50%)';
+
+    const label = document.createElement('span');
+    label.className = 'token-label';
+    label.textContent = state.team_name || ch.label;
+    token.appendChild(label);
+
+    token.addEventListener('mousedown', (e) => startDrag(e, ch.name, token));
+    token.addEventListener('touchstart', (e) => startDragTouch(e, ch.name, token), { passive: false });
+
+    overlay.appendChild(token);
+  }
+}
+
+function renderPalette() {
+  const grid = document.getElementById('characterGrid');
+  grid.innerHTML = '';
+
+  for (const ch of CHARACTERS) {
+    const state = gameState[ch.name];
+    const posIdx = state ? state.position_index : 0;
+
+    const card = document.createElement('div');
+    card.className = 'character-card';
+    card.dataset.charName = ch.name;
+
+    card.innerHTML = `
+      <div class="emoji">${ch.emoji}</div>
+      <div class="info">
+        <div class="name">${ch.label}</div>
+        <div class="team">${state ? (state.team_name || 'غير معين') : 'غير معين'}</div>
+        <div class="pos">الموقع: ${posIdx}</div>
+      </div>
+      <div class="controls">
+        <button onclick="editCharacter('${ch.name}')" title="تعديل">✏️</button>
+        <button onclick="removeCharacter('${ch.name}')" title="إزالة من اللوحة">🗑️</button>
+      </div>
+    `;
+
+    card.addEventListener('mousedown', (e) => startDragPalette(e, ch.name));
+    card.addEventListener('touchstart', (e) => startDragPaletteTouch(e, ch.name), { passive: false });
+
+    grid.appendChild(card);
+  }
+}
+
+// ─── Drag & Drop ───
+
+let dragData = null;
+
+function startDrag(e, charName, tokenEl) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  dragData = { charName, el: tokenEl, offsetX: e.offsetX, offsetY: e.offsetY, fromBoard: true };
+  tokenEl.style.zIndex = 100;
+  tokenEl.style.transform = 'translate(-50%, -50%) scale(1.3)';
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', endDrag);
+}
+
+function startDragTouch(e, charName, tokenEl) {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = tokenEl.getBoundingClientRect();
+  dragData = {
+    charName, el: tokenEl,
+    offsetX: touch.clientX - rect.left,
+    offsetY: touch.clientY - rect.top,
+    fromBoard: true
+  };
+  tokenEl.style.zIndex = 100;
+  tokenEl.style.transform = 'translate(-50%, -50%) scale(1.3)';
+  document.addEventListener('touchmove', onDragTouch, { passive: false });
+  document.addEventListener('touchend', endDragTouch, { passive: false });
+}
+
+function startDragPalette(e, charName) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const wrapper = document.getElementById('boardWrapper');
+  const rect = wrapper.getBoundingClientRect();
+  dragData = { charName, el: null, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, fromBoard: false };
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', endDrag);
+}
+
+function startDragPaletteTouch(e, charName) {
+  e.preventDefault();
+  const wrapper = document.getElementById('boardWrapper');
+  const rect = wrapper.getBoundingClientRect();
+  const touch = e.touches[0];
+  dragData = {
+    charName, el: null,
+    offsetX: touch.clientX - rect.left,
+    offsetY: touch.clientY - rect.top,
+    fromBoard: false
+  };
+  document.addEventListener('touchmove', onDragTouch, { passive: false });
+  document.addEventListener('touchend', endDragTouch, { passive: false });
+}
+
+function onDrag(e) {
+  if (!dragData) return;
+  const wrapper = document.getElementById('boardWrapper');
+  const img = document.getElementById('boardImg');
+  const imgRect = img.getBoundingClientRect();
+  const wrapperRect = wrapper.getBoundingClientRect();
+
+  // Create a floating ghost if dragging from palette
+  if (!dragData.el) {
+    let ghost = document.getElementById('dragGhost');
+    if (!ghost) {
+      ghost = document.createElement('div');
+      ghost.id = 'dragGhost';
+      ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;font-size:3rem;filter:drop-shadow(0 0 10px rgba(233,69,96,0.8));transform:translate(-50%,-50%);';
+      document.body.appendChild(ghost);
+    }
+    const ch = CHARACTERS.find(c => c.name === dragData.charName);
+    ghost.textContent = ch ? ch.emoji : '?';
+    ghost.style.left = e.clientX + 'px';
+    ghost.style.top = e.clientY + 'px';
+    ghost.style.display = 'block';
+  }
+
+  // Highlight nearest position
+  highlightNearestPosition(e.clientX, e.clientY);
+}
+
+function onDragTouch(e) {
+  if (!dragData) return;
+  e.preventDefault();
+  const touch = e.touches[0];
+  const wrapper = document.getElementById('boardWrapper');
+  const img = document.getElementById('boardImg');
+  const imgRect = img.getBoundingClientRect();
+
+  if (!dragData.el) {
+    let ghost = document.getElementById('dragGhost');
+    if (!ghost) {
+      ghost = document.createElement('div');
+      ghost.id = 'dragGhost';
+      ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;font-size:3rem;filter:drop-shadow(0 0 10px rgba(233,69,96,0.8));transform:translate(-50%,-50%);';
+      document.body.appendChild(ghost);
+    }
+    const ch = CHARACTERS.find(c => c.name === dragData.charName);
+    ghost.textContent = ch ? ch.emoji : '?';
+    ghost.style.left = touch.clientX + 'px';
+    ghost.style.top = touch.clientY + 'px';
+    ghost.style.display = 'block';
+  }
+
+  highlightNearestPosition(touch.clientX, touch.clientY);
+}
+
+function endDrag(e) {
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', endDrag);
+  finishDrag(e.clientX, e.clientY);
+}
+
+function endDragTouch(e) {
+  document.removeEventListener('touchmove', onDragTouch);
+  document.removeEventListener('touchend', endDragTouch);
+  const touch = e.changedTouches[0];
+  finishDrag(touch.clientX, touch.clientY);
+}
+
+function finishDrag(clientX, clientY) {
+  // Remove ghost
+  const ghost = document.getElementById('dragGhost');
+  if (ghost) { ghost.style.display = 'none'; }
+
+  // Find nearest position
+  const img = document.getElementById('boardImg');
+  const imgRect = img.getBoundingClientRect();
+
+  const relX = (clientX - imgRect.left) / imgRect.width * BOARD_W;
+  const relY = (clientY - imgRect.top) / imgRect.height * BOARD_H;
+
+  let minDist = Infinity;
+  let nearestIdx = -1;
+  for (let i = 0; i < POSITIONS.length; i++) {
+    const p = POSITIONS[i];
+    const dist = Math.sqrt((relX - p.x) ** 2 + (relY - p.y) ** 2);
+    if (dist < minDist) {
+      minDist = dist;
+      nearestIdx = i;
+    }
+  }
+
+  // Clear highlights
+  document.querySelectorAll('.position-marker.active').forEach(el => el.classList.remove('active'));
+
+  if (nearestIdx >= 0 && minDist < 150) {
+    // Place character at this position
+    setCharacterPosition(dragData.charName, nearestIdx);
+    // Highlight
+    const markers = document.querySelectorAll('.position-marker');
+    if (markers[nearestIdx]) markers[nearestIdx].classList.add('active');
+    setTimeout(() => {
+      if (markers[nearestIdx]) markers[nearestIdx].classList.remove('active');
+    }, 1000);
+  } else if (dragData.fromBoard) {
+    // If dragging from board and not dropping on a valid position, keep original position
+  } else {
+    // If dragging from palette and not dropping on a valid position, keep at 0
+    setCharacterPosition(dragData.charName, 0);
+  }
+
+  if (dragData.el) {
+    dragData.el.style.transform = 'translate(-50%, -50%) scale(1)';
+    dragData.el.style.zIndex = 10;
+  }
+
+  dragData = null;
+}
+
+function highlightNearestPosition(clientX, clientY) {
+  const img = document.getElementById('boardImg');
+  const imgRect = img.getBoundingClientRect();
+  const relX = (clientX - imgRect.left) / imgRect.width * BOARD_W;
+  const relY = (clientY - imgRect.top) / imgRect.height * BOARD_H;
+
+  let minDist = Infinity;
+  let nearestIdx = -1;
+  for (let i = 0; i < POSITIONS.length; i++) {
+    const p = POSITIONS[i];
+    const dist = Math.sqrt((relX - p.x) ** 2 + (relY - p.y) ** 2);
+    if (dist < minDist) {
+      minDist = dist;
+      nearestIdx = i;
+    }
+  }
+
+  document.querySelectorAll('.position-marker.active').forEach(el => el.classList.remove('active'));
+  if (nearestIdx >= 0 && minDist < 150) {
+    const markers = document.querySelectorAll('.position-marker');
+    if (markers[nearestIdx]) markers[nearestIdx].classList.add('active');
+  }
+}
+
+function setCharacterPosition(charName, posIndex) {
+  if (!gameState[charName]) {
+    const ch = CHARACTERS.find(c => c.name === charName);
+    gameState[charName] = { team_name: ch ? ch.label : '', position_index: posIndex, character_emoji: ch ? ch.emoji : '?' };
+  } else {
+    gameState[charName].position_index = posIndex;
+  }
+  renderBoard();
+  renderPalette();
+}
+
+function removeCharacter(charName) {
+  if (!gameState[charName]) return;
+  delete gameState[charName];
+  renderBoard();
+  renderPalette();
+  showStatus(`تمت إزالة ${CHARACTERS.find(c=>c.name===charName)?.label}`);
+}
+
+function editCharacter(charName) {
+  const ch = CHARACTERS.find(c => c.name === charName);
+  const state = gameState[charName];
+  document.getElementById('modalCharName').value = ch ? ch.label : charName;
+  document.getElementById('modalCharName').dataset.name = charName;
+  document.getElementById('modalCharEmoji').value = ch ? ch.emoji : '?';
+  document.getElementById('modalTeamName').value = state ? (state.team_name || '') : '';
+  document.getElementById('modalPosition').value = state ? state.position_index : 0;
+  document.getElementById('teamModal').classList.add('open');
+}
+
+function openModalForPosition(posIndex) {
+  // Show modal asking which character to place here
+  const chNames = Object.keys(gameState);
+  if (chNames.length === 0) {
+    showStatus('اسحب شخصية إلى اللوحة أولاً', true);
+    return;
+  }
+  // Pick the first character not on this position, or just edit the nearest one
+  // Simple: just show the position and let user type a team name
+  const firstChar = chNames[0];
+  editCharacter(firstChar);
+  document.getElementById('modalPosition').value = posIndex;
+}
+
+function closeModal() {
+  document.getElementById('teamModal').classList.remove('open');
+}
+
+function saveCharacterFromModal() {
+  const name = document.getElementById('modalCharName').dataset.name;
+  const teamName = document.getElementById('modalTeamName').value.trim();
+  const posIdx = parseInt(document.getElementById('modalPosition').value) || 0;
+
+  if (!gameState[name]) {
+    const ch = CHARACTERS.find(c => c.name === name);
+    gameState[name] = { team_name: teamName, position_index: posIdx, character_emoji: ch ? ch.emoji : '?' };
+  } else {
+    gameState[name].team_name = teamName;
+    gameState[name].position_index = Math.max(0, Math.min(posIdx, 39));
+  }
+  closeModal();
+  renderBoard();
+  renderPalette();
+
+  // Auto-save
+  saveAll();
+}
+
+// ─── Init ───
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadGame();
+});
+</script>
+</body>
+</html>

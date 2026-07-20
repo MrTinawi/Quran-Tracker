@@ -151,6 +151,12 @@ with st.sidebar:
 
     class_name = st.session_state.class_name
 
+    if st.button("🎲 لعبة مونوبولي الحفظ"):
+        st.markdown(
+            f'<a href="/game?class={class_name}" target="_blank" style="display:block;text-align:center;padding:10px;background:#e94560;color:white;border-radius:8px;text-decoration:none;font-weight:900;">🎲 افتح لوحة اللعبة</a>',
+            unsafe_allow_html=True
+        )
+
     if st.button("🚪 تسجيل الخروج"):
         st.session_state.user = None
         st.rerun()
