@@ -267,7 +267,8 @@ def api_game_save():
             character_name=ch["character_name"],
             character_emoji=ch["character_emoji"],
             team_name=ch.get("team_name", ""),
-            position_index=ch.get("position_index", 0),
+            pos_x=ch.get("pos_x", 640),
+            pos_y=ch.get("pos_y", 638),
         )
     return jsonify({"success": True})
 

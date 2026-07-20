@@ -267,7 +267,8 @@ def init_game_table():
                 character_name TEXT NOT NULL,
                 character_emoji TEXT NOT NULL,
                 team_name TEXT DEFAULT '',
-                position_index INTEGER NOT NULL DEFAULT 0,
+                pos_x REAL DEFAULT 640,
+                pos_y REAL DEFAULT 638,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(class_name, character_name)
             )
@@ -281,13 +282,26 @@ def init_game_table():
                 character_name TEXT NOT NULL,
                 character_emoji TEXT NOT NULL,
                 team_name TEXT DEFAULT '',
-                position_index INTEGER NOT NULL DEFAULT 0,
+                pos_x REAL DEFAULT 640,
+                pos_y REAL DEFAULT 638,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(class_name, character_name)
             )
         """)
     _commit(conn)
     _close(conn)
+
+    conn2 = _get_conn()
+    for col, typ in [("pos_x", "REAL DEFAULT 640"), ("pos_y", "REAL DEFAULT 638")]:
+        try:
+            if USE_SQLITE:
+                _exec(conn2, f"ALTER TABLE game_state ADD COLUMN {col} {typ}")
+            else:
+                _exec(conn2, f"ALTER TABLE game_state ADD COLUMN IF NOT EXISTS {col} {typ}")
+            _commit(conn2)
+        except Exception:
+            _commit(conn2)
+    _close(conn2)
 
 def get_game_state(class_name="new_vision"):
     init_game_table()
@@ -297,17 +311,18 @@ def get_game_state(class_name="new_vision"):
     _close(conn)
     return [dict(r) for r in rows]
 
-def save_game_state(class_name, character_name, character_emoji, team_name, position_index):
+def save_game_state(class_name, character_name, character_emoji, team_name, pos_x, pos_y):
     init_game_table()
     conn = _get_conn()
     _exec(conn, _sql("""
-        INSERT INTO game_state (class_name, character_name, character_emoji, team_name, position_index, updated_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        INSERT INTO game_state (class_name, character_name, character_emoji, team_name, pos_x, pos_y, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(class_name, character_name) DO UPDATE SET
             team_name = excluded.team_name,
-            position_index = excluded.position_index,
+            pos_x = excluded.pos_x,
+            pos_y = excluded.pos_y,
             updated_at = datetime('now')
-    """), (class_name, character_name, character_emoji, team_name, position_index))
+    """), (class_name, character_name, character_emoji, team_name, pos_x, pos_y))
     _commit(conn)
     _close(conn)
 
@@ -320,21 +335,26 @@ def reset_game_state(class_name="new_vision"):
 
 def seed_default_characters(class_name="new_vision"):
     init_game_table()
+    import random
     defaults = [
-        ("crown",       "👑",  "الفريق الأول",   0),
-        ("padel",       "🏓",  "الفريق الثاني",  1),
-        ("gold_coin",   "🪙",  "الفريق الثالث",  2),
-        ("car",         "🚗",  "الفريق الرابع",  3),
-        ("book",        "📖",  "الفريق الخامس",  4),
-        ("star",         "⭐",  "الفريق السادس",  5),
+        ("crown",       "👑",  "الفريق الأول"),
+        ("padel",       "🏓",  "الفريق الثاني"),
+        ("gold_coin",   "🪙",  "الفريق الثالث"),
+        ("car",         "🚗",  "الفريق الرابع"),
+        ("book",        "📖",  "الفريق الخامس"),
+        ("star",         "⭐",  "الفريق السادس"),
     ]
-    for name, emoji, team, pos in defaults:
+    positions = [
+        (640, 100), (640, 1177), (100, 638), (1180, 638),
+        (400, 300), (880, 977),
+    ]
+    for (name, emoji, team), (px, py) in zip(defaults, positions):
         conn = _get_conn()
         try:
             _exec(conn, _sql("""
-                INSERT INTO game_state (class_name, character_name, character_emoji, team_name, position_index)
-                VALUES (?, ?, ?, ?, ?)
-            """), (class_name, name, emoji, team, pos))
+                INSERT INTO game_state (class_name, character_name, character_emoji, team_name, pos_x, pos_y)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """), (class_name, name, emoji, team, px, py))
             _commit(conn)
         except Exception:
             _commit(conn)
