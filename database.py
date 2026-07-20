@@ -121,6 +121,97 @@ def init_db():
     except Exception:
         _commit(conn2)
 
+    # Migration: add surah/ayah columns to entries
+    for col, typ in [("surah_id", "INTEGER DEFAULT NULL"),
+                     ("start_ayah", "INTEGER DEFAULT NULL"),
+                     ("end_ayah", "INTEGER DEFAULT NULL")]:
+        try:
+            if USE_SQLITE:
+                _exec(conn2, f"ALTER TABLE entries ADD COLUMN {col} {typ}")
+            else:
+                _exec(conn2, f"ALTER TABLE entries ADD COLUMN IF NOT EXISTS {col} {typ}")
+            _commit(conn2)
+        except Exception:
+            _commit(conn2)
+
+    # Migration: add current_surah_id to students
+    try:
+        if USE_SQLITE:
+            _exec(conn2, "ALTER TABLE students ADD COLUMN current_surah_id INTEGER DEFAULT NULL")
+        else:
+            _exec(conn2, "ALTER TABLE students ADD COLUMN IF NOT EXISTS current_surah_id INTEGER DEFAULT NULL")
+        _commit(conn2)
+    except Exception:
+        _commit(conn2)
+
+    # Create surahs table
+    if USE_SQLITE:
+        _exec(conn2, """
+            CREATE TABLE IF NOT EXISTS surahs (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                ayah_count INTEGER NOT NULL
+            )
+        """)
+    else:
+        _exec(conn2, """
+            CREATE TABLE IF NOT EXISTS surahs (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                ayah_count INTEGER NOT NULL
+            )
+        """)
+    _commit(conn2)
+
+    # Seed surahs if empty
+    cur = _exec(conn2, "SELECT COUNT(*) as cnt FROM surahs")
+    row = cur.fetchone()
+    if row["cnt"] == 0:
+        surahs = [
+            (1, "الفاتحة", 7), (2, "البقرة", 286), (3, "آل عمران", 200),
+            (4, "النساء", 176), (5, "المائدة", 120), (6, "الأنعام", 165),
+            (7, "الأعراف", 206), (8, "الأنفال", 75), (9, "التوبة", 129),
+            (10, "يونس", 109), (11, "هود", 123), (12, "يوسف", 111),
+            (13, "الرعد", 43), (14, "إبراهيم", 52), (15, "الحجر", 99),
+            (16, "النحل", 128), (17, "الإسراء", 111), (18, "الكهف", 110),
+            (19, "مريم", 98), (20, "طه", 135), (21, "الأنبياء", 112),
+            (22, "الحج", 78), (23, "المؤمنون", 118), (24, "النور", 64),
+            (25, "الفرقان", 77), (26, "الشعراء", 227), (27, "النمل", 93),
+            (28, "القصص", 88), (29, "العنكبوت", 69), (30, "الروم", 60),
+            (31, "لقمان", 34), (32, "السجدة", 30), (33, "الأحزاب", 73),
+            (34, "سبأ", 54), (35, "فاطر", 45), (36, "يس", 83),
+            (37, "الصافات", 182), (38, "ص", 88), (39, "الزمر", 75),
+            (40, "غافر", 85), (41, "فصلت", 54), (42, "الشورى", 53),
+            (43, "الزخرف", 89), (44, "الدخان", 59), (45, "الجاثية", 37),
+            (46, "الأحقاف", 35), (47, "محمد", 38), (48, "الفتح", 29),
+            (49, "الحجرات", 18), (50, "ق", 45), (51, "الذاريات", 60),
+            (52, "الطور", 49), (53, "النجم", 62), (54, "القمر", 55),
+            (55, "الرحمن", 78), (56, "الواقعة", 96), (57, "الحديد", 29),
+            (58, "المجادلة", 22), (59, "الحشر", 24), (60, "الممتحنة", 13),
+            (61, "الصف", 14), (62, "الجمعة", 11), (63, "المنافقون", 11),
+            (64, "التغابن", 18), (65, "الطلاق", 12), (66, "التحريم", 12),
+            (67, "الملك", 30), (68, "القلم", 52), (69, "الحاقة", 52),
+            (70, "المعارج", 44), (71, "نوح", 28), (72, "الجن", 28),
+            (73, "المزمل", 20), (74, "المدثر", 56), (75, "القيامة", 40),
+            (76, "الإنسان", 31), (77, "المرسلات", 50), (78, "النبأ", 40),
+            (79, "النازعات", 46), (80, "عبس", 42), (81, "التكوير", 29),
+            (82, "الإنفطار", 19), (83, "المطففين", 36), (84, "الانشقاق", 25),
+            (85, "البروج", 22), (86, "الطارق", 17), (87, "الأعلى", 19),
+            (88, "الغاشية", 26), (89, "الفجر", 30), (90, "البلد", 20),
+            (91, "الشمس", 15), (92, "الليل", 21), (93, "الضحى", 11),
+            (94, "الشرح", 8), (95, "التين", 8), (96, "العلق", 19),
+            (97, "القدر", 5), (98, "البينة", 8), (99, "الزلزلة", 8),
+            (100, "العاديات", 11), (101, "القارعة", 11), (102, "التكاثر", 8),
+            (103, "العصر", 3), (104, "الهمزة", 9), (105, "الفيل", 5),
+            (106, "قريش", 4), (107, "الماعون", 7), (108, "الكوثر", 3),
+            (109, "الكافرون", 6), (110, "النصر", 3), (111, "المسد", 5),
+            (112, "الإخلاص", 4), (113, "الفلق", 5), (114, "الناس", 6),
+        ]
+        for s_id, s_name, s_ayahs in surahs:
+            _exec(conn2, _sql("INSERT OR IGNORE INTO surahs (id, name, ayah_count) VALUES (?, ?, ?)"),
+                  (s_id, s_name, s_ayahs))
+        _commit(conn2)
+
     _close(conn2)
 
 # ─── Auth ───
@@ -290,11 +381,12 @@ def get_entry(student_id, session_id):
     return row
 
 def save_entry(student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages=0,
-               attended=1, misbehaviour_penalty=0, inactive_penalty=0):
+               attended=1, misbehaviour_penalty=0, inactive_penalty=0,
+               surah_id=None, start_ayah=None, end_ayah=None):
     conn = _get_conn()
     upsert = """
-        INSERT INTO entries (student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO entries (student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty, surah_id, start_ayah, end_ayah)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(student_id, session_id) DO UPDATE SET
             hifdh_pages = {ex}.hifdh_pages,
             tilawah_pages = {ex}.tilawah_pages,
@@ -304,9 +396,12 @@ def save_entry(student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, p
             surah_anam_pages = {ex}.surah_anam_pages,
             attended = {ex}.attended,
             misbehaviour_penalty = {ex}.misbehaviour_penalty,
-            inactive_penalty = {ex}.inactive_penalty
+            inactive_penalty = {ex}.inactive_penalty,
+            surah_id = {ex}.surah_id,
+            start_ayah = {ex}.start_ayah,
+            end_ayah = {ex}.end_ayah
     """.format(ex="excluded" if USE_SQLITE else "EXCLUDED")
-    params = (student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty)
+    params = (student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty, surah_id, start_ayah, end_ayah)
     _exec(conn, _sql(upsert), params)
     _commit(conn)
     _close(conn)
@@ -341,8 +436,11 @@ def get_student_history(student_id):
     conn = _get_conn()
     cur = _exec(conn, _sql("""
         SELECT s.date, s.label, e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages,
-               e.attended, e.misbehaviour_penalty, e.inactive_penalty
-        FROM entries e JOIN sessions s ON e.session_id = s.id
+               e.attended, e.misbehaviour_penalty, e.inactive_penalty,
+               e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+        FROM entries e
+        JOIN sessions s ON e.session_id = s.id
+        LEFT JOIN surahs su ON e.surah_id = su.id
         WHERE e.student_id = ? ORDER BY s.id
     """), (student_id,))
     rows = cur.fetchall()
@@ -355,16 +453,24 @@ def get_all_entries_for_session(session_id, class_name=None):
         cur = _exec(conn, _sql("""
             SELECT t.name as team_name, s.name as student_name,
                    e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
-                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
-            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty,
+                   e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE e.session_id = ? AND t.class_name = ? ORDER BY t.name, s.name
         """), (session_id, class_name))
     else:
         cur = _exec(conn, _sql("""
             SELECT t.name as team_name, s.name as student_name,
                    e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
-                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
-            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty,
+                   e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE e.session_id = ? ORDER BY t.name, s.name
         """), (session_id,))
     rows = cur.fetchall()
@@ -378,9 +484,13 @@ def get_all_data_for_export(class_name=None):
             SELECT sess.date as session_date, sess.label as session_label,
                    t.name as team, s.name as student,
                    e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
-                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
-            FROM entries e JOIN students s ON e.student_id = s.id
-            JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty,
+                   e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            JOIN sessions sess ON e.session_id = sess.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE t.class_name = ?
             ORDER BY sess.id, t.name, s.name
         """), (class_name,))
@@ -389,9 +499,13 @@ def get_all_data_for_export(class_name=None):
             SELECT sess.date as session_date, sess.label as session_label,
                    t.name as team, s.name as student,
                    e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
-                   e.attended, e.misbehaviour_penalty, e.inactive_penalty
-            FROM entries e JOIN students s ON e.student_id = s.id
-            JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+                   e.attended, e.misbehaviour_penalty, e.inactive_penalty,
+                   e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            JOIN sessions sess ON e.session_id = sess.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             ORDER BY sess.id, t.name, s.name
         """)
     rows = cur.fetchall()
@@ -479,15 +593,23 @@ def get_top_memorizers(session_id, class_name=None):
     if class_name:
         cur = _exec(conn, _sql("""
             SELECT s.name as student_name, t.name as team_name,
-                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages
-            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages,
+                   e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE e.session_id = ? AND e.hifdh_pages > 0 AND t.class_name = ? ORDER BY e.hifdh_pages DESC
         """), (session_id, class_name))
     else:
         cur = _exec(conn, _sql("""
             SELECT s.name as student_name, t.name as team_name,
-                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages
-            FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
+                   e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.surah_anam_pages,
+                   e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+            FROM entries e
+            JOIN students s ON e.student_id = s.id
+            JOIN teams t ON s.team_id = t.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE e.session_id = ? AND e.hifdh_pages > 0 ORDER BY e.hifdh_pages DESC
         """), (session_id,))
     rows = cur.fetchall()
@@ -498,12 +620,12 @@ def get_all_entries_raw(class_name=None):
     conn = _get_conn()
     if class_name:
         cur = _exec(conn, _sql("""
-            SELECT e.id, e.student_id, e.session_id, e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages, e.attended, e.misbehaviour_penalty, e.inactive_penalty
+            SELECT e.id, e.student_id, e.session_id, e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages, e.attended, e.misbehaviour_penalty, e.inactive_penalty, e.surah_id, e.start_ayah, e.end_ayah
             FROM entries e JOIN students s ON e.student_id = s.id JOIN teams t ON s.team_id = t.id
             WHERE t.class_name = ? ORDER BY e.id
         """), (class_name,))
     else:
-        cur = _exec(conn, "SELECT id, student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty FROM entries ORDER BY id")
+        cur = _exec(conn, "SELECT id, student_id, session_id, hifdh_pages, tilawah_pages, rabt_pages, points, notes, surah_anam_pages, attended, misbehaviour_penalty, inactive_penalty, surah_id, start_ayah, end_ayah FROM entries ORDER BY id")
     rows = cur.fetchall()
     _close(conn)
     return rows
@@ -524,11 +646,13 @@ def get_weekly_top_hifdh(since_date, class_name=None):
             SELECT s.name as student_name, t.name as team_name,
                    COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
                    COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points,
+                   su.name as surah_name
             FROM entries e
             JOIN students s ON e.student_id = s.id
             JOIN teams t ON s.team_id = t.id
             JOIN sessions sess ON e.session_id = sess.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE sess.date >= ? AND e.hifdh_pages > 0 AND t.class_name = ?
             GROUP BY e.student_id
             ORDER BY total_hifdh DESC
@@ -538,11 +662,13 @@ def get_weekly_top_hifdh(since_date, class_name=None):
             SELECT s.name as student_name, t.name as team_name,
                    COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
                    COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points,
+                   su.name as surah_name
             FROM entries e
             JOIN students s ON e.student_id = s.id
             JOIN teams t ON s.team_id = t.id
             JOIN sessions sess ON e.session_id = sess.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE sess.date >= ? AND e.hifdh_pages > 0
             GROUP BY e.student_id
             ORDER BY total_hifdh DESC
@@ -558,11 +684,13 @@ def get_weekly_top_rabt(since_date, class_name=None):
             SELECT s.name as student_name, t.name as team_name,
                    COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
                    COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points,
+                   su.name as surah_name
             FROM entries e
             JOIN students s ON e.student_id = s.id
             JOIN teams t ON s.team_id = t.id
             JOIN sessions sess ON e.session_id = sess.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE sess.date >= ? AND e.rabt_pages > 0 AND t.class_name = ?
             GROUP BY e.student_id
             ORDER BY total_rabt DESC
@@ -572,11 +700,13 @@ def get_weekly_top_rabt(since_date, class_name=None):
             SELECT s.name as student_name, t.name as team_name,
                    COALESCE(SUM(e.hifdh_pages), 0) as total_hifdh,
                    COALESCE(SUM(e.rabt_pages), 0) as total_rabt,
-                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points
+                   COALESCE(SUM(e.points + COALESCE(e.misbehaviour_penalty, 0) + COALESCE(e.inactive_penalty, 0)), 0) as total_points,
+                   su.name as surah_name
             FROM entries e
             JOIN students s ON e.student_id = s.id
             JOIN teams t ON s.team_id = t.id
             JOIN sessions sess ON e.session_id = sess.id
+            LEFT JOIN surahs su ON e.surah_id = su.id
             WHERE sess.date >= ? AND e.rabt_pages > 0
             GROUP BY e.student_id
             ORDER BY total_rabt DESC
@@ -709,12 +839,15 @@ def get_hifdh_leaders_all_sessions(class_name=None):
             WITH ranked AS (
                 SELECT sess.id as session_id, sess.date, sess.label,
                        s.name as student_name, t.name as team_name, e.hifdh_pages,
+                       su.name as surah_name, e.start_ayah, e.end_ayah,
                        ROW_NUMBER() OVER (PARTITION BY sess.id ORDER BY e.hifdh_pages DESC) as rn
                 FROM entries e JOIN students s ON e.student_id = s.id
                 JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+                LEFT JOIN surahs su ON e.surah_id = su.id
                 WHERE e.hifdh_pages > 0 AND t.class_name = ?
             )
-            SELECT session_id, date, label, student_name, team_name, hifdh_pages
+            SELECT session_id, date, label, student_name, team_name, hifdh_pages,
+                   surah_name, start_ayah, end_ayah
             FROM ranked WHERE rn = 1 ORDER BY session_id
         """), (class_name,))
     else:
@@ -722,14 +855,70 @@ def get_hifdh_leaders_all_sessions(class_name=None):
             WITH ranked AS (
                 SELECT sess.id as session_id, sess.date, sess.label,
                        s.name as student_name, t.name as team_name, e.hifdh_pages,
+                       su.name as surah_name, e.start_ayah, e.end_ayah,
                        ROW_NUMBER() OVER (PARTITION BY sess.id ORDER BY e.hifdh_pages DESC) as rn
                 FROM entries e JOIN students s ON e.student_id = s.id
                 JOIN teams t ON s.team_id = t.id JOIN sessions sess ON e.session_id = sess.id
+                LEFT JOIN surahs su ON e.surah_id = su.id
                 WHERE e.hifdh_pages > 0
             )
-            SELECT session_id, date, label, student_name, team_name, hifdh_pages
+            SELECT session_id, date, label, student_name, team_name, hifdh_pages,
+                   surah_name, start_ayah, end_ayah
             FROM ranked WHERE rn = 1 ORDER BY session_id
         """)
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+# ─── Surahs ───
+
+def get_surahs():
+    conn = _get_conn()
+    cur = _exec(conn, "SELECT * FROM surahs ORDER BY id")
+    rows = cur.fetchall()
+    _close(conn)
+    return rows
+
+def get_surah_by_id(surah_id):
+    conn = _get_conn()
+    cur = _exec(conn, _sql("SELECT * FROM surahs WHERE id = ?"), (surah_id,))
+    row = cur.fetchone()
+    _close(conn)
+    return row
+
+def get_student_current_surah(student_id):
+    conn = _get_conn()
+    cur = _exec(conn, _sql("""
+        SELECT s.current_surah_id, su.name as surah_name, su.ayah_count
+        FROM students s
+        LEFT JOIN surahs su ON s.current_surah_id = su.id
+        WHERE s.id = ?
+    """), (student_id,))
+    row = cur.fetchone()
+    _close(conn)
+    return row
+
+def set_student_current_surah(student_id, surah_id):
+    conn = _get_conn()
+    _exec(conn, _sql("UPDATE students SET current_surah_id = ? WHERE id = ?"), (surah_id, student_id))
+    _commit(conn)
+    _close(conn)
+
+def get_team_export_data(team_id):
+    conn = _get_conn()
+    cur = _exec(conn, _sql("""
+        SELECT sess.date as session_date, sess.label as session_label,
+               s.name as student,
+               e.hifdh_pages, e.tilawah_pages, e.rabt_pages, e.points, e.notes, e.surah_anam_pages,
+               e.attended, e.misbehaviour_penalty, e.inactive_penalty,
+               e.surah_id, e.start_ayah, e.end_ayah, su.name as surah_name
+        FROM entries e
+        JOIN students s ON e.student_id = s.id
+        JOIN sessions sess ON e.session_id = sess.id
+        LEFT JOIN surahs su ON e.surah_id = su.id
+        WHERE s.team_id = ?
+        ORDER BY sess.id, s.name
+    """), (team_id,))
     rows = cur.fetchall()
     _close(conn)
     return rows
