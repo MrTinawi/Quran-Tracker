@@ -111,74 +111,71 @@ body {
   pointer-events: auto;
 }
 
-.position-marker {
+.slot-marker {
   position: absolute;
-  width: 5.5%;
-  height: 5.5%;
-  border: 2px dashed rgba(233, 69, 96, 0.5);
-  border-radius: 4px;
-  background: rgba(233, 69, 96, 0.08);
+  width: 3.2%;
+  height: 3.2%;
+  border: 2px solid rgba(233, 69, 96, 0.35);
+  border-radius: 50%;
+  background: rgba(233, 69, 96, 0.06);
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.6vw;
-  color: rgba(255,255,255,0.5);
-  font-weight: 700;
-  overflow: visible;
+  z-index: 2;
 }
-.position-marker:hover {
-  background: rgba(233, 69, 96, 0.25);
+.slot-marker:hover {
+  background: rgba(233, 69, 96, 0.2);
   border-color: #e94560;
-  transform: scale(1.08);
-  z-index: 5;
+  transform: scale(1.15);
+  z-index: 6;
 }
-.position-marker.active {
+.slot-marker.active {
   border-color: #2ecc71;
   background: rgba(46, 204, 113, 0.2);
 }
-.position-marker .pos-num {
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.55rem;
-  color: rgba(255,255,255,0.3);
+.slot-marker.occupied {
+  border-color: transparent;
+  background: transparent;
+}
+.slot-marker .pos-num {
+  font-size: 0.5rem;
+  color: rgba(255,255,255,0.25);
   pointer-events: none;
-  white-space: nowrap;
 }
 
 /* Character token placed on board */
 .character-token {
   position: absolute;
-  font-size: 2.2vw;
+  font-size: 1.8vw;
   cursor: grab;
   z-index: 10;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   filter: drop-shadow(0 0 6px rgba(233,69,96,0.6));
   user-select: none;
   pointer-events: auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 5.5%;
-  height: 5.5%;
+  width: 3.5%;
+  height: 3.5%;
+  border-radius: 50%;
 }
 .character-token:active {
   cursor: grabbing;
-  transform: scale(1.3);
+  transform: scale(1.5);
   z-index: 100;
 }
 .character-token .token-label {
   position: absolute;
-  bottom: -12px;
+  bottom: -14px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 0.5rem;
   font-weight: 700;
   color: #fff;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0,0,0,0.75);
   padding: 1px 6px;
   border-radius: 4px;
   white-space: nowrap;
@@ -365,7 +362,7 @@ body {
 
 .legend {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
   flex-wrap: wrap;
   margin: 8px 0;
@@ -389,7 +386,7 @@ body {
 
 <div class="header">
   <h1>🎲 لعبة مونوبولي الحفظ</h1>
-  <div class="subtitle">اسحب الشخصيات وضعها على اللوحة — كلما حفظ الفريق صفحات أكثر، تقدم قطعة واحدة</div>
+  <div class="subtitle">كل موقع يحتوي 3 أماكن — اسحب الشخصية إلى المكان الفارغ</div>
 </div>
 
 <div class="top-bar">
@@ -400,6 +397,7 @@ body {
     </select>
     <button class="primary" onclick="saveAll()">💾 حفظ الكل</button>
     <button onclick="loadGame()">🔄 تحديث</button>
+    <span style="font-size:0.75rem;color:#888;" id="charCount"></span>
   </div>
   <div style="display:flex;gap:8px;align-items:center;">
     <button class="danger" onclick="confirmReset()">🔄 إعادة تعيين</button>
@@ -408,9 +406,9 @@ body {
 </div>
 
 <div class="legend">
-  <span class="legend-item">🟥 منصة الانطلاق</span>
-  <span class="legend-item">🟩 موقع شخصية</span>
-  <span class="legend-item">👆 اسحب الشخصيات من الأسفل إلى اللوحة</span>
+  <span class="legend-item">🔴 3 أماكن لكل موقع</span>
+  <span class="legend-item">🟢 مكان فارغ</span>
+  <span class="legend-item">👆 اسحب الشخصية من الأسفل إلى مكان فارغ</span>
 </div>
 
 <div class="board-wrapper" id="boardWrapper">
@@ -430,7 +428,7 @@ body {
     <label>اسم الشخصية</label>
     <input type="text" id="modalCharName" readonly disabled style="opacity:0.6;">
     <label>رمز الشخصية</label>
-    <input type="text" id="modalCharEmoji" id="modalCharEmoji" readonly disabled style="opacity:0.6;text-align:center;font-size:2rem;">
+    <input type="text" id="modalCharEmoji" readonly disabled style="opacity:0.6;text-align:center;font-size:2rem;">
     <label>الفريق / التسمية</label>
     <input type="text" id="modalTeamName" placeholder="مثال: الفريق الأول">
     <label>رقم الموقع (0-39)</label>
@@ -457,63 +455,42 @@ const CHARACTERS = [
   { name: 'star',        emoji: '⭐',  label: 'النجمة' },
 ];
 
-// 40 positions around the board perimeter
-const MARGIN_X = 65;
-const MARGIN_Y = 60;
-const RIGHT = 1215;
-const BOTTOM = 1217;
-const TOP = 60;
-const LEFT = 65;
+const LEFT = 65, RIGHT = 1215, TOP = 60, BOTTOM = 1217;
 
+// 40 center positions
 function calcPositions() {
-  const positions = [];
+  const pos = [];
   const xStep = (RIGHT - LEFT) / 10;
   const yStep = (BOTTOM - TOP) / 10;
-
-  // Bottom: left to right (pos 0-10)
-  for (let i = 0; i <= 10; i++) {
-    positions.push({
-      x: LEFT + i * xStep,
-      y: BOTTOM,
-      side: 'bottom',
-      index: positions.length
-    });
-  }
-  // Right: bottom to top (skip corner pos 10, start from pos 11)
-  for (let i = 1; i < 10; i++) {
-    positions.push({
-      x: RIGHT,
-      y: BOTTOM - i * yStep,
-      side: 'right',
-      index: positions.length
-    });
-  }
-  // Top: right to left (pos 20-30)
-  for (let i = 0; i <= 10; i++) {
-    positions.push({
-      x: RIGHT - i * xStep,
-      y: TOP,
-      side: 'top',
-      index: positions.length
-    });
-  }
-  // Left: top to bottom (skip corner pos 30, start from pos 31)
-  for (let i = 1; i < 10; i++) {
-    positions.push({
-      x: LEFT,
-      y: TOP + i * yStep,
-      side: 'left',
-      index: positions.length
-    });
-  }
-
-  return positions;
+  for (let i = 0; i <= 10; i++) pos.push({ x: LEFT + i * xStep, y: BOTTOM, side: 'bottom' });
+  for (let i = 1; i < 10; i++) pos.push({ x: RIGHT, y: BOTTOM - i * yStep, side: 'right' });
+  for (let i = 0; i <= 10; i++) pos.push({ x: RIGHT - i * xStep, y: TOP, side: 'top' });
+  for (let i = 1; i < 10; i++) pos.push({ x: LEFT, y: TOP + i * yStep, side: 'left' });
+  return pos;
 }
-
 const POSITIONS = calcPositions();
 
-let gameState = {}; // character_name -> { team_name, position_index }
-let draggingChar = null;
+// 3 slots per position — offsets based on side, pointing toward board center
+const SLOT_OFFSETS = {
+  bottom: [{ dx: 0, dy: -24 }, { dx: -22, dy: -10 }, { dx: 22, dy: -10 }],
+  top:    [{ dx: 0, dy: 24 },  { dx: -22, dy: 10 },  { dx: 22, dy: 10 }],
+  right:  [{ dx: -24, dy: 0 }, { dx: -10, dy: -22 }, { dx: -10, dy: 22 }],
+  left:   [{ dx: 24, dy: 0 },  { dx: 10, dy: -22 },  { dx: 10, dy: 22 }],
+};
+
+function getPosCenter(index) {
+  return POSITIONS[index];
+}
+
+function getSlotPos(posIndex, slotIndex) {
+  const p = POSITIONS[posIndex];
+  if (!p) return { x: 0, y: 0 };
+  const offsets = SLOT_OFFSETS[p.side] || SLOT_OFFSETS.bottom;
+  const off = offsets[slotIndex] || offsets[0];
+  return { x: p.x + off.dx, y: p.y + off.dy };
+}
+
+let gameState = {};
 
 function getClass() {
   return document.getElementById('classSelector').value;
@@ -586,7 +563,6 @@ async function confirmReset() {
   const cls = getClass();
   try {
     await fetch(`${getApiBase()}/api/game/reset?class=${encodeURIComponent(cls)}`, { method: 'POST' });
-    // Seed defaults
     await fetch(`${getApiBase()}/api/game/seed?class=${encodeURIComponent(cls)}`, { method: 'POST' });
     showStatus('✅ تم إعادة التعيين');
     loadGame();
@@ -595,70 +571,85 @@ async function confirmReset() {
   }
 }
 
-function getScaledPos(posIndex) {
-  const wrapper = document.getElementById('boardWrapper');
-  const img = document.getElementById('boardImg');
-  if (!wrapper || !img) return { x: 0, y: 0 };
+// Figure out which characters are at each position
+function getCharsAtPosition(posIndex) {
+  const chars = [];
+  for (const ch of CHARACTERS) {
+    const state = gameState[ch.name];
+    if (state && state.position_index === posIndex) {
+      chars.push(ch);
+    }
+  }
+  return chars;
+}
 
-  const rect = img.getBoundingClientRect();
-  const scaleX = rect.width / BOARD_W;
-  const scaleY = rect.height / BOARD_H;
-  const wrapperRect = wrapper.getBoundingClientRect();
-
-  const p = POSITIONS[posIndex];
-  if (!p) return { x: 0, y: 0 };
-
-  return {
-    x: p.x * scaleX,
-    y: p.y * scaleY,
-    scaleX,
-    scaleY,
-    containerW: rect.width,
-    containerH: rect.height,
-  };
+// Get the slot index for a character at a position (0, 1, or 2)
+function getCharSlotIndex(charName, posIndex) {
+  const chars = getCharsAtPosition(posIndex);
+  const idx = chars.findIndex(c => c.name === charName);
+  return idx >= 0 ? (idx % 3) : 0;
 }
 
 function renderBoard() {
   const overlay = document.getElementById('boardOverlay');
   overlay.innerHTML = '';
 
-  // Position markers
+  const placed = document.getElementById('charCount');
+  const placedCount = Object.keys(gameState).length;
+  if (placed) placed.textContent = `${placedCount}/6 شخصيات موضوعة`;
+
+  // 1. Render all slots
   for (let i = 0; i < POSITIONS.length; i++) {
-    const p = POSITIONS[i];
-    const marker = document.createElement('div');
-    marker.className = 'position-marker';
-    marker.dataset.index = i;
-    marker.style.left = (p.x / BOARD_W * 100) + '%';
-    marker.style.top = (p.y / BOARD_H * 100) + '%';
-    marker.style.transform = 'translate(-50%, -50%)';
+    for (let s = 0; s < 3; s++) {
+      const slotPos = getSlotPos(i, s);
+      const charsHere = getCharsAtPosition(i);
+      const occupied = s < charsHere.length;
 
-    const numLabel = document.createElement('span');
-    numLabel.className = 'pos-num';
-    numLabel.textContent = i;
-    marker.appendChild(numLabel);
+      const slot = document.createElement('div');
+      slot.className = 'slot-marker' + (occupied ? ' occupied' : '');
+      slot.dataset.posIndex = i;
+      slot.dataset.slotIndex = s;
+      slot.style.left = (slotPos.x / BOARD_W * 100) + '%';
+      slot.style.top = (slotPos.y / BOARD_H * 100) + '%';
+      slot.style.transform = 'translate(-50%, -50%)';
 
-    marker.addEventListener('click', () => {
-      openModalForPosition(i);
-    });
+      if (!occupied) {
+        const num = document.createElement('span');
+        num.className = 'pos-num';
+        num.textContent = i;
+        slot.appendChild(num);
 
-    overlay.appendChild(marker);
+        slot.addEventListener('click', () => {
+          openModalForPosition(i);
+        });
+        slot.addEventListener('mouseenter', () => {
+          // Highlight all slots at this position
+          document.querySelectorAll(`.slot-marker[data-pos-index="${i}"]`).forEach(el => el.classList.add('active'));
+        });
+        slot.addEventListener('mouseleave', () => {
+          document.querySelectorAll(`.slot-marker[data-pos-index="${i}"]`).forEach(el => el.classList.remove('active'));
+        });
+      }
+
+      overlay.appendChild(slot);
+    }
   }
 
-  // Character tokens on board
+  // 2. Render character tokens on top of slots
   for (const ch of CHARACTERS) {
     const state = gameState[ch.name];
     if (!state) continue;
     const posIdx = state.position_index;
-    const pos = POSITIONS[posIdx];
-    if (!pos) continue;
+    const slotIdx = getCharSlotIndex(ch.name, posIdx);
+    const slotPos = getSlotPos(posIdx, slotIdx);
 
     const token = document.createElement('div');
     token.className = 'character-token';
     token.dataset.charName = ch.name;
     token.textContent = ch.emoji;
 
-    token.style.left = (pos.x / BOARD_W * 100) + '%';
-    token.style.top = (pos.y / BOARD_H * 100) + '%';
+    token.style.left = (slotPos.x / BOARD_W * 100) + '%';
+    token.style.top = (slotPos.y / BOARD_H * 100) + '%';
     token.style.transform = 'translate(-50%, -50%)';
 
     const label = document.createElement('span');
@@ -712,25 +703,18 @@ let dragData = null;
 function startDrag(e, charName, tokenEl) {
   if (e.button !== 0) return;
   e.preventDefault();
-  dragData = { charName, el: tokenEl, offsetX: e.offsetX, offsetY: e.offsetY, fromBoard: true };
+  dragData = { charName, el: tokenEl, fromBoard: true };
   tokenEl.style.zIndex = 100;
-  tokenEl.style.transform = 'translate(-50%, -50%) scale(1.3)';
+  tokenEl.style.transform = 'translate(-50%, -50%) scale(1.5)';
   document.addEventListener('mousemove', onDrag);
   document.addEventListener('mouseup', endDrag);
 }
 
 function startDragTouch(e, charName, tokenEl) {
   e.preventDefault();
-  const touch = e.touches[0];
-  const rect = tokenEl.getBoundingClientRect();
-  dragData = {
-    charName, el: tokenEl,
-    offsetX: touch.clientX - rect.left,
-    offsetY: touch.clientY - rect.top,
-    fromBoard: true
-  };
+  dragData = { charName, el: tokenEl, fromBoard: true };
   tokenEl.style.zIndex = 100;
-  tokenEl.style.transform = 'translate(-50%, -50%) scale(1.3)';
+  tokenEl.style.transform = 'translate(-50%, -50%) scale(1.5)';
   document.addEventListener('touchmove', onDragTouch, { passive: false });
   document.addEventListener('touchend', endDragTouch, { passive: false });
 }
@@ -738,36 +722,20 @@ function startDragTouch(e, charName, tokenEl) {
 function startDragPalette(e, charName) {
   if (e.button !== 0) return;
   e.preventDefault();
-  const wrapper = document.getElementById('boardWrapper');
-  const rect = wrapper.getBoundingClientRect();
-  dragData = { charName, el: null, offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top, fromBoard: false };
+  dragData = { charName, el: null, fromBoard: false };
   document.addEventListener('mousemove', onDrag);
   document.addEventListener('mouseup', endDrag);
 }
 
 function startDragPaletteTouch(e, charName) {
   e.preventDefault();
-  const wrapper = document.getElementById('boardWrapper');
-  const rect = wrapper.getBoundingClientRect();
-  const touch = e.touches[0];
-  dragData = {
-    charName, el: null,
-    offsetX: touch.clientX - rect.left,
-    offsetY: touch.clientY - rect.top,
-    fromBoard: false
-  };
+  dragData = { charName, el: null, fromBoard: false };
   document.addEventListener('touchmove', onDragTouch, { passive: false });
   document.addEventListener('touchend', endDragTouch, { passive: false });
 }
 
 function onDrag(e) {
   if (!dragData) return;
-  const wrapper = document.getElementById('boardWrapper');
-  const img = document.getElementById('boardImg');
-  const imgRect = img.getBoundingClientRect();
-  const wrapperRect = wrapper.getBoundingClientRect();
-
-  // Create a floating ghost if dragging from palette
   if (!dragData.el) {
     let ghost = document.getElementById('dragGhost');
     if (!ghost) {
@@ -782,19 +750,13 @@ function onDrag(e) {
     ghost.style.top = e.clientY + 'px';
     ghost.style.display = 'block';
   }
-
-  // Highlight nearest position
-  highlightNearestPosition(e.clientX, e.clientY);
+  highlightNearestSlot(e.clientX, e.clientY);
 }
 
 function onDragTouch(e) {
   if (!dragData) return;
   e.preventDefault();
   const touch = e.touches[0];
-  const wrapper = document.getElementById('boardWrapper');
-  const img = document.getElementById('boardImg');
-  const imgRect = img.getBoundingClientRect();
-
   if (!dragData.el) {
     let ghost = document.getElementById('dragGhost');
     if (!ghost) {
@@ -809,8 +771,7 @@ function onDragTouch(e) {
     ghost.style.top = touch.clientY + 'px';
     ghost.style.display = 'block';
   }
-
-  highlightNearestPosition(touch.clientX, touch.clientY);
+  highlightNearestSlot(touch.clientX, touch.clientY);
 }
 
 function endDrag(e) {
@@ -826,45 +787,58 @@ function endDragTouch(e) {
   finishDrag(touch.clientX, touch.clientY);
 }
 
-function finishDrag(clientX, clientY) {
-  // Remove ghost
-  const ghost = document.getElementById('dragGhost');
-  if (ghost) { ghost.style.display = 'none'; }
-
-  // Find nearest position
+function findNearestEmptySlot(clientX, clientY) {
   const img = document.getElementById('boardImg');
   const imgRect = img.getBoundingClientRect();
-
   const relX = (clientX - imgRect.left) / imgRect.width * BOARD_W;
   const relY = (clientY - imgRect.top) / imgRect.height * BOARD_H;
 
+  let best = null;
   let minDist = Infinity;
-  let nearestIdx = -1;
+
   for (let i = 0; i < POSITIONS.length; i++) {
-    const p = POSITIONS[i];
-    const dist = Math.sqrt((relX - p.x) ** 2 + (relY - p.y) ** 2);
-    if (dist < minDist) {
-      minDist = dist;
-      nearestIdx = i;
+    const charsHere = getCharsAtPosition(i);
+    const occupiedSlots = charsHere.length;
+
+    for (let s = 0; s < 3; s++) {
+      if (s < occupiedSlots) continue; // slot taken
+      const slotPos = getSlotPos(i, s);
+      const dist = Math.sqrt((relX - slotPos.x) ** 2 + (relY - slotPos.y) ** 2);
+      if (dist < minDist) {
+        minDist = dist;
+        best = { posIndex: i, slotIndex: s };
+      }
     }
   }
 
-  // Clear highlights
-  document.querySelectorAll('.position-marker.active').forEach(el => el.classList.remove('active'));
+  return { best, minDist };
+}
 
-  if (nearestIdx >= 0 && minDist < 150) {
-    // Place character at this position
-    setCharacterPosition(dragData.charName, nearestIdx);
-    // Highlight
-    const markers = document.querySelectorAll('.position-marker');
-    if (markers[nearestIdx]) markers[nearestIdx].classList.add('active');
-    setTimeout(() => {
-      if (markers[nearestIdx]) markers[nearestIdx].classList.remove('active');
-    }, 1000);
-  } else if (dragData.fromBoard) {
-    // If dragging from board and not dropping on a valid position, keep original position
-  } else {
-    // If dragging from palette and not dropping on a valid position, keep at 0
+function highlightNearestSlot(clientX, clientY) {
+  const { best, minDist } = findNearestEmptySlot(clientX, clientY);
+  document.querySelectorAll('.slot-marker.active').forEach(el => el.classList.remove('active'));
+  if (best && minDist < 180) {
+    document.querySelectorAll(`.slot-marker[data-pos-index="${best.posIndex}"]`).forEach(el => el.classList.add('active'));
+  }
+}
+
+function finishDrag(clientX, clientY) {
+  const ghost = document.getElementById('dragGhost');
+  if (ghost) ghost.style.display = 'none';
+
+  const { best, minDist } = findNearestEmptySlot(clientX, clientY);
+
+  document.querySelectorAll('.slot-marker.active').forEach(el => el.classList.remove('active'));
+
+  if (best && minDist < 180) {
+    setCharacterPosition(dragData.charName, best.posIndex);
+    // Flash the position
+    document.querySelectorAll(`.slot-marker[data-pos-index="${best.posIndex}"]`).forEach(el => {
+      el.classList.add('active');
+      setTimeout(() => el.classList.remove('active'), 800);
+    });
+  } else if (!dragData.fromBoard) {
+    // Dropped from palette outside board — keep at position 0
     setCharacterPosition(dragData.charName, 0);
   }
 
@@ -872,32 +846,7 @@ function finishDrag(clientX, clientY) {
     dragData.el.style.transform = 'translate(-50%, -50%) scale(1)';
     dragData.el.style.zIndex = 10;
   }
-
   dragData = null;
-}
-
-function highlightNearestPosition(clientX, clientY) {
-  const img = document.getElementById('boardImg');
-  const imgRect = img.getBoundingClientRect();
-  const relX = (clientX - imgRect.left) / imgRect.width * BOARD_W;
-  const relY = (clientY - imgRect.top) / imgRect.height * BOARD_H;
-
-  let minDist = Infinity;
-  let nearestIdx = -1;
-  for (let i = 0; i < POSITIONS.length; i++) {
-    const p = POSITIONS[i];
-    const dist = Math.sqrt((relX - p.x) ** 2 + (relY - p.y) ** 2);
-    if (dist < minDist) {
-      minDist = dist;
-      nearestIdx = i;
-    }
-  }
-
-  document.querySelectorAll('.position-marker.active').forEach(el => el.classList.remove('active'));
-  if (nearestIdx >= 0 && minDist < 150) {
-    const markers = document.querySelectorAll('.position-marker');
-    if (markers[nearestIdx]) markers[nearestIdx].classList.add('active');
-  }
 }
 
 function setCharacterPosition(charName, posIndex) {
@@ -931,14 +880,11 @@ function editCharacter(charName) {
 }
 
 function openModalForPosition(posIndex) {
-  // Show modal asking which character to place here
   const chNames = Object.keys(gameState);
   if (chNames.length === 0) {
     showStatus('اسحب شخصية إلى اللوحة أولاً', true);
     return;
   }
-  // Pick the first character not on this position, or just edit the nearest one
-  // Simple: just show the position and let user type a team name
   const firstChar = chNames[0];
   editCharacter(firstChar);
   document.getElementById('modalPosition').value = posIndex;
@@ -963,12 +909,8 @@ function saveCharacterFromModal() {
   closeModal();
   renderBoard();
   renderPalette();
-
-  // Auto-save
   saveAll();
 }
-
-// ─── Init ───
 
 document.addEventListener('DOMContentLoaded', () => {
   loadGame();
